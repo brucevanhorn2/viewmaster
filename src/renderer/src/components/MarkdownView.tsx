@@ -10,9 +10,20 @@ export default function MarkdownView({ content }: { content: string }): React.JS
 
   useEffect(() => {
     let stale = false
-    void renderMarkdown(content).then((rendered) => {
-      if (!stale) setHtml(rendered)
-    })
+    renderMarkdown(content)
+      .then((rendered) => {
+        if (!stale) setHtml(rendered)
+      })
+      .catch((err: unknown) => {
+        // Degrade to escaped source rather than a blank pane.
+        if (stale) return
+        const escape = (s: string): string =>
+          s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        const message = err instanceof Error ? err.message : String(err)
+        setHtml(
+          `<p><em>Markdown rendering failed: ${escape(message)}</em></p><pre><code>${escape(content)}</code></pre>`
+        )
+      })
     return () => {
       stale = true
     }

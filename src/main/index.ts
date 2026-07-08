@@ -71,6 +71,12 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  // Dev/testing hook: auto-open a folder on launch.
+  const autoOpen = process.env['VIEWMASTER_OPEN']
+  if (autoOpen) {
+    win.webContents.on('did-finish-load', () => sendOpenFolder(win, autoOpen))
+  }
+
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
