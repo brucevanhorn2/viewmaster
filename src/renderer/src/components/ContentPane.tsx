@@ -5,7 +5,7 @@ import DiffView from './DiffView'
 import MarkdownView from './MarkdownView'
 import Placeholder from './Placeholder'
 
-type Mode = 'view' | 'diff'
+type Mode = 'view' | 'marks' | 'diff'
 
 const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx']
 
@@ -37,7 +37,7 @@ export default function ContentPane({
     void window.viewmaster.readFile(file.absPath).then((c) => {
       if (!stale) setContent(c)
     })
-    if (mode === 'diff') {
+    if (mode === 'diff' || mode === 'marks') {
       void window.viewmaster.readBaseFile(file.path).then((base) => {
         if (!stale) setBaseContent(base)
       })
@@ -83,6 +83,13 @@ export default function ContentPane({
           sideBySide={sideBySide}
         />
       )
+  } else if (mode === 'marks' && isMarkdown(file.path)) {
+    body =
+      baseContent === null ? (
+        <Placeholder title="Loading marks…" />
+      ) : (
+        <MarkdownView content={content.content} baseContent={baseContent} />
+      )
   } else if (isMarkdown(file.path)) {
     body = <MarkdownView content={content.content} />
   } else {
@@ -103,13 +110,27 @@ export default function ContentPane({
               {sideBySide ? 'Inline' : 'Side by side'}
             </button>
           )}
-          {showToolbarToggles && (
-            <button
-              className={`toolbar-button${mode === 'diff' ? ' active' : ''}`}
-              onClick={() => setMode(mode === 'diff' ? 'view' : 'diff')}
-            >
-              Diff
-            </button>
+          {showToolbarToggles && isMarkdown(file.path) ? (
+            <span className="toolbar-segment">
+              {(['view', 'marks', 'diff'] as const).map((m) => (
+                <button
+                  key={m}
+                  className={`toolbar-button${mode === m ? ' active' : ''}`}
+                  onClick={() => setMode(m)}
+                >
+                  {m === 'view' ? 'Rendered' : m === 'marks' ? 'Marks' : 'Source'}
+                </button>
+              ))}
+            </span>
+          ) : (
+            showToolbarToggles && (
+              <button
+                className={`toolbar-button${mode === 'diff' ? ' active' : ''}`}
+                onClick={() => setMode(mode === 'diff' ? 'view' : 'diff')}
+              >
+                Diff
+              </button>
+            )
           )}
         </span>
       </div>

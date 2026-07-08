@@ -38,8 +38,13 @@ async function getMd(): Promise<MarkdownIt> {
   return mdPromise
 }
 
+/** Shared sanitizer for all rendered-markdown HTML paths. */
+export function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html)
+}
+
 /** Render markdown to sanitized HTML (shiki-highlighted fences, mermaid markers). */
 export async function renderMarkdown(src: string): Promise<string> {
   const md = await getMd()
-  return DOMPurify.sanitize(md.render(src))
+  return sanitizeHtml(md.render(src))
 }

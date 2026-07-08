@@ -1,33 +1,68 @@
 import { useEffect, useRef, useState } from 'react'
 import mermaid from 'mermaid'
-import { renderMarkdown } from '../markdown/render'
+import { renderMarkdown, sanitizeHtml } from '../markdown/render'
+import { composeMarks } from '../markdown/marksDiff'
 
 mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' })
 
-export default function MarkdownView({ content }: { content: string }): React.JSX.Element {
+const escape = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+/**
+ * Rendered markdown. When `baseContent` is a string (possibly ''), renders
+ * editor's marks: the diff between baseContent and content shown inline in
+ * the rendered output. `baseContent === null` → plain rendered view.
+ */
+export default function MarkdownView({
+  content,
+  baseContent = null
+}: {
+  content: string
+  baseContent?: string | null
+}): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [html, setHtml] = useState('')
 
   useEffect(() => {
     let stale = false
-    renderMarkdown(content)
+
+    const render = async (): Promise<string> => {
+      if (baseContent === null) return renderMarkdown(content)
+      const [oldHtml, newHtml] = await Promise.all([
+        renderMarkdown(baseContent),
+        renderMarkdown(content)
+      ])
+      return sanitizeHtml(composeMarks(oldHtml, newHtml))
+    }
+
+    render()
       .then((rendered) => {
         if (!stale) setHtml(rendered)
       })
-      .catch((err: unknown) => {
-        // Degrade to escaped source rather than a blank pane.
+      .catch(async (err: unknown) => {
         if (stale) return
-        const escape = (s: string): string =>
-          s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         const message = err instanceof Error ? err.message : String(err)
-        setHtml(
-          `<p><em>Markdown rendering failed: ${escape(message)}</em></p><pre><code>${escape(content)}</code></pre>`
-        )
+        if (baseContent !== null) {
+          // Marks composition failed — fall back to the plain rendered view.
+          try {
+            const plain = await renderMarkdown(content)
+            if (!stale) setHtml(`<p><em>Marks unavailable: ${escape(message)}</em></p>${plain}`)
+            return
+          } catch {
+            // fall through to the escaped-source fallback
+          }
+        }
+        if (!stale) {
+          setHtml(
+            `<p><em>Markdown rendering failed: ${escape(message)}</em></p><pre><code>${escape(content)}</code></pre>`
+          )
+        }
       })
+
     return () => {
       stale = true
     }
-  }, [content])
+  }, [content, baseContent])
 
   useEffect(() => {
     const container = ref.current
