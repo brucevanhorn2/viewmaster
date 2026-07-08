@@ -43,16 +43,20 @@ export function composeMarks(oldHtml: string, newHtml: string): string {
   const reducedNew = extractBlocks(newHtml, blocks)
   const merged = htmldiff(reducedOld, reducedNew)
 
-  return merged.replace(TOKEN_RE, (match, key: string, offset: number) => {
-    const block = blocks.get(key)
-    if (!block) return match
-    const context = contextAt(merged, offset)
-    if (context === 'del') {
-      return `</del><div class="vm-block vm-block-del">${block}</div><del>`
-    }
-    if (context === 'ins') {
-      return `</ins><div class="vm-block vm-block-ins">${block}</div><ins>`
-    }
-    return block
-  })
+  return merged
+    .replace(TOKEN_RE, (match, key: string, offset: number) => {
+      const block = blocks.get(key)
+      if (!block) return match
+      const context = contextAt(merged, offset)
+      if (context === 'del') {
+        return `</del><div class="vm-block vm-block-del">${block}</div><del>`
+      }
+      if (context === 'ins') {
+        return `</ins><div class="vm-block vm-block-ins">${block}</div><ins>`
+      }
+      return block
+    })
+    // Splitting blocks out leaves whitespace-only ins/del stubs behind;
+    // drop them so they don't render as colored slivers.
+    .replace(/<(ins|del)[^>]*>\s*<\/\1>/g, '')
 }
