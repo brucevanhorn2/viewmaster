@@ -1,0 +1,46 @@
+{
+  "name": "viewmaster",
+  "version": "0.1.0",
+  "description": "Read-only desktop viewer for markdown documents and branch diffs",
+  "main": "./out/main/index.js",
+  "author": "Bruce Van Horn",
+  "license": "MIT",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "build": "npm run typecheck && electron-vite build",
+    "test": "vitest run",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "dependencies": {
+    "electron-store": "8.2.0"
+  },
+  "devDependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@shikijs/markdown-it": "^4.3.1",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "allotment": "^1.20.5",
+    "chokidar": "^5.0.0",
+    "dompurify": "^3.4.11",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "markdown-it": "^14.3.0",
+    "material-icon-theme": "^5.36.1",
+    "mermaid": "^11.16.0",
+    "monaco-editor": "^0.55.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "shiki": "^4.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10"
+  }
+}

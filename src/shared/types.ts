@@ -1,0 +1,33 @@
+export type FileStatus = 'untracked' | 'modified' | 'staged' | 'committed'
+
+/** Priority order for primary status: highest ("most live") wins. */
+export const STATUS_PRIORITY: FileStatus[] = ['untracked', 'modified', 'staged', 'committed']
+
+export interface ChangedFile {
+  /** Repo-relative path, forward slashes. */
+  path: string
+  absPath: string
+  /** Primary (highest-priority) status. */
+  status: FileStatus
+  /** Next-highest status also present, if any. */
+  secondary?: FileStatus
+}
+
+export type BaselineKind =
+  | { kind: 'merge-base'; base: string; defaultBranch: string; branch: string }
+  | {
+      kind: 'working-only'
+      reason: 'detached' | 'on-default' | 'no-commits' | 'no-baseline'
+      branch?: string
+    }
+
+export type RepoState =
+  | { kind: 'repo'; root: string; baseline: BaselineKind; files: ChangedFile[] }
+  | { kind: 'not-git'; root: string }
+  | { kind: 'error'; root: string; message: string }
+
+export type FileContent =
+  | { kind: 'text'; content: string }
+  | { kind: 'binary' }
+  | { kind: 'too-large'; size: number }
+  | { kind: 'missing' }

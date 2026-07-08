@@ -1,0 +1,65 @@
+:root {
+  --bg: #1e1e1e;
+  --bg-sidebar: #252526;
+  --bg-hover: #2a2d2e;
+  --bg-active: #37373d;
+  --fg: #cccccc;
+  --fg-dim: #9d9d9d;
+  --border: #3c3c3c;
+  --accent: #0e639c;
+  --accent-hover: #1177bb;
+  --status-untracked: #73c991;
+  --status-modified: #e2c08d;
+  --status-staged: #75beff;
+  --status-committed: #c5c5c5;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Ubuntu, 'Helvetica Neue', sans-serif;
+  --font-mono: 'SF Mono', Monaco, Menlo, Consolas, 'Courier New', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.welcome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.welcome h1 {
+  font-weight: 300;
+  font-size: 32px;
+  margin: 0;
+  color: var(--fg);
+}
+
+.welcome p {
+  color: var(--fg-dim);
+  margin: 0;
+}
