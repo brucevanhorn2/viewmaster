@@ -1,0 +1,29 @@
+appId: com.vanhorn.viewmaster
+productName: viewmaster
+directories:
+  output: release
+  buildResources: resources
+files:
+  - '!src/*'
+  - '!docs/*'
+  - '!resources/*'
+  - '!electron.vite.config.ts'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,vitest.config.ts}'
+  - '!{.gitignore,README.md}'
+npmRebuild: false
+# No publishing / auto-update artifacts — local unsigned builds only.
+publish: null
+mac:
+  target:
+    - dmg
+  # Unsigned for now — no signing keys. README documents the Gatekeeper
+  # right-click -> Open step.
+  identity: null
+  category: public.app-category.developer-tools
+linux:
+  target:
+    - AppImage
+  category: Development
+win:
+  target:
+    - nsis
