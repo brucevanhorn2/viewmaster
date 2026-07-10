@@ -3,18 +3,30 @@ import { join } from 'path'
 import { registerIpc, disposeIpc } from './ipc'
 import { getRecentFolders, getWindowBounds, setWindowBounds } from './store'
 
-function sendOpenFolder(win: BrowserWindow, root: string): void {
-  win.webContents.send('menu:openFolder', root)
+// The single app window. Resolved at *use* time everywhere (menu clicks,
+// watcher pushes, dialogs) — capturing a BrowserWindow in a closure goes
+// stale when the window is closed and recreated via macOS `activate`,
+// which silently killed auto-refresh in recreated windows.
+let mainWindow: BrowserWindow | null = null
+
+function getMainWindow(): BrowserWindow | null {
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
 }
 
-async function pickFolder(win: BrowserWindow): Promise<void> {
+function sendOpenFolder(root: string): void {
+  getMainWindow()?.webContents.send('menu:openFolder', root)
+}
+
+async function pickFolder(): Promise<void> {
+  const win = getMainWindow()
+  if (!win) return
   const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
   if (!result.canceled && result.filePaths.length > 0) {
-    sendOpenFolder(win, result.filePaths[0])
+    sendOpenFolder(result.filePaths[0])
   }
 }
 
-function buildMenu(win: BrowserWindow): void {
+function buildMenu(): void {
   const recents = getRecentFolders()
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
@@ -24,12 +36,12 @@ function buildMenu(win: BrowserWindow): void {
         {
           label: 'Open Folder…',
           accelerator: 'CmdOrCtrl+O',
-          click: () => void pickFolder(win)
+          click: () => void pickFolder()
         },
         {
           label: 'Open Recent',
           submenu: recents.length
-            ? recents.map((root) => ({ label: root, click: () => sendOpenFolder(win, root) }))
+            ? recents.map((root) => ({ label: root, click: () => sendOpenFolder(root) }))
             : [{ label: 'No Recent Folders', enabled: false }]
         },
         { type: 'separator' },
@@ -58,6 +70,11 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  mainWindow = win
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null
+  })
+
   const saveBounds = (): void => {
     if (!win.isDestroyed() && !win.isMinimized()) setWindowBounds(win.getBounds())
   }
@@ -74,7 +91,7 @@ function createWindow(): BrowserWindow {
   // Dev/testing hook: auto-open a folder on launch.
   const autoOpen = process.env['VIEWMASTER_OPEN']
   if (autoOpen) {
-    win.webContents.on('did-finish-load', () => sendOpenFolder(win, autoOpen))
+    win.webContents.on('did-finish-load', () => sendOpenFolder(autoOpen))
   }
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -87,10 +104,10 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
-  const win = createWindow()
+  createWindow()
   // Rebuild the menu when a repo opens so the recent-folders submenu stays fresh.
-  registerIpc(win, () => buildMenu(win))
-  buildMenu(win)
+  registerIpc(getMainWindow, () => buildMenu())
+  buildMenu()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
