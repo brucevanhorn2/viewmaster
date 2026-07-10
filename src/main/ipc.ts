@@ -40,7 +40,9 @@ async function computeRepoState(root: string): Promise<RepoState> {
   }
 }
 
-async function openRepo(win: BrowserWindow, root: string): Promise<RepoState> {
+type WindowGetter = () => BrowserWindow | null
+
+async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoState> {
   await closeSession()
   const state = await computeRepoState(root)
 
@@ -51,7 +53,10 @@ async function openRepo(win: BrowserWindow, root: string): Promise<RepoState> {
     const watcher = watchRepo(watchRoot, async () => {
       const fresh = await computeRepoState(watchRoot)
       if (session?.root === watchRoot && fresh.kind === 'repo') session.baseline = fresh.baseline
-      if (!win.isDestroyed()) win.webContents.send('repo:changed', fresh)
+      // Resolve the window at send time — the window that opened the repo
+      // may have been closed and replaced since.
+      const win = getWindow()
+      if (win && !win.isDestroyed()) win.webContents.send('repo:changed', fresh)
     })
     session = { root: state.root, baseline: state.baseline, watcher }
   }
@@ -59,14 +64,18 @@ async function openRepo(win: BrowserWindow, root: string): Promise<RepoState> {
   return state
 }
 
-export function registerIpc(win: BrowserWindow, onRepoOpened?: () => void): void {
+export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void): void {
   ipcMain.handle('dialog:openFolder', async (): Promise<string | null> => {
-    const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
+    const win = getWindow()
+    const options = { properties: ['openDirectory'] as 'openDirectory'[] }
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options)
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
   })
 
   ipcMain.handle('repo:open', async (_e, root: string): Promise<RepoState> => {
-    const state = await openRepo(win, root)
+    const state = await openRepo(getWindow, root)
     onRepoOpened?.()
     return state
   })
