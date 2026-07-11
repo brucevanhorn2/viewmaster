@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "build": "npm run typecheck && electron-vite build",
+    "build": "npm run typecheck && node --max-old-space-size=4096 ./node_modules/.bin/electron-vite build",
     "test": "vitest run",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux",
