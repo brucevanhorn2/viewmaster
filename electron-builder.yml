@@ -23,7 +23,9 @@ mac:
 linux:
   target:
     - AppImage
+    - deb
   category: Development
+  maintainer: Bruce Van Horn <brucevanhorn2@gmail.com>
 win:
   target:
     - nsis
