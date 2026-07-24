@@ -27,7 +27,6 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
     "allotment": "^1.20.5",
-    "chokidar": "^5.0.0",
     "dompurify": "^3.4.11",
     "electron": "^43.1.0",
     "electron-builder": "^26.15.3",

@@ -4,8 +4,7 @@ import { resolve } from 'path'
 
 export default defineConfig({
   main: {
-    // chokidar is ESM-only; bundle it into the CJS main output instead of externalizing
-    plugins: [externalizeDepsPlugin({ exclude: ['chokidar'] })],
+    plugins: [externalizeDepsPlugin()],
     resolve: { alias: { '@shared': resolve('src/shared') } }
   },
   preload: {
