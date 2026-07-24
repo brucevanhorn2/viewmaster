@@ -31,3 +31,12 @@ export type FileContent =
   | { kind: 'binary' }
   | { kind: 'too-large'; size: number }
   | { kind: 'missing' }
+
+export interface HistoryVersion {
+  /** Capture time, epoch milliseconds. */
+  ts: number
+  /** sha256 hex of the captured content (object key). */
+  sha: string
+  /** Byte length of the captured content. */
+  size: number
+}
