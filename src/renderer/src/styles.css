@@ -543,3 +543,60 @@ body {
 .toolbar-segment .toolbar-button:last-child {
   border-radius: 0 3px 3px 0;
 }
+
+/* ---- history pane ---- */
+
+.history-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+  background: #1e1e1e;
+  border-top: 1px solid #333;
+}
+.history-title {
+  padding: 6px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+}
+.history-empty {
+  padding: 8px 10px;
+  color: #777;
+  font-size: 12px;
+}
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #ccc;
+}
+.history-row:hover {
+  background: #2a2d2e;
+}
+.history-row .history-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #666;
+  flex: none;
+}
+.history-row.sel-base {
+  background: #37373d;
+}
+.history-row.sel-compare {
+  background: #094771;
+}
+.history-row.sel-base .history-dot,
+.history-row.sel-compare .history-dot {
+  background: #4da3ff;
+}
