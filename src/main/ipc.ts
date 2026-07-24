@@ -57,7 +57,8 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
       if (recomputeTimer) clearTimeout(recomputeTimer)
       recomputeTimer = setTimeout(async () => {
         const fresh = await computeRepoState(watchRoot)
-        if (session?.root === watchRoot && fresh.kind === 'repo') session.baseline = fresh.baseline
+        if (session?.root !== watchRoot) return
+        if (fresh.kind === 'repo') session.baseline = fresh.baseline
         // Resolve the window at send time — the window that opened the repo
         // may have been closed and replaced since.
         const win = getWindow()
