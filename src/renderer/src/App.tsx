@@ -81,6 +81,7 @@ export default function App(): React.JSX.Element {
   // Reset the revision selection whenever the selected file changes.
   useEffect(() => {
     setSelection(defaultSelection())
+    setVersions([])
   }, [selected?.path])
 
   // Load local history for the selected file (git repos only), refreshing when
@@ -101,10 +102,7 @@ export default function App(): React.JSX.Element {
 
   const onSelectRevision = useCallback(
     (ref: RevisionRef): void => {
-      setSelection((prev) => {
-        void prev
-        return singleClickSelection(versions, ref)
-      })
+      setSelection(singleClickSelection(versions, ref))
     },
     [versions]
   )

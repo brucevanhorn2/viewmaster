@@ -54,6 +54,12 @@ export default function ContentPane({
     }
   }, [file, refreshKey])
 
+  // Show the loading placeholder while a newly-selected revision pair resolves.
+  useEffect(() => {
+    setBaseContent(null)
+    setCompareContent(null)
+  }, [selection, file?.path, mode])
+
   // Resolve base/compare sides from the selection when diffing.
   useEffect(() => {
     if (!file || (mode !== 'diff' && mode !== 'marks')) return
