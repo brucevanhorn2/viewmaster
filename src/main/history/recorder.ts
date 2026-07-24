@@ -39,18 +39,14 @@ export function createRecorder(root: string, options: RecorderOptions): Recorder
 
   const settleTimers = new Map<string, NodeJS.Timeout>()
   const maxTimers = new Map<string, NodeJS.Timeout>()
-  const queues = new Map<string, Promise<void>>()
   let pruneTimer: NodeJS.Timeout | null = null
-  let prunePending: Promise<void> = Promise.resolve()
 
-  const enqueue = (relPath: string, fn: () => Promise<void>): Promise<void> => {
-    const prev = queues.get(relPath) ?? Promise.resolve()
-    const next = prev.then(fn, fn)
-    queues.set(
-      relPath,
-      next.catch(() => {})
-    )
-    return next
+  let chain: Promise<void> = Promise.resolve()
+  const enqueue = (fn: () => Promise<void>): Promise<void> => {
+    chain = chain.then(fn).catch((err) => {
+      console.error('[viewmaster:history] recorder task failed:', err)
+    })
+    return chain
   }
 
   const capture = async (relPath: string): Promise<void> => {
@@ -63,11 +59,10 @@ export function createRecorder(root: string, options: RecorderOptions): Recorder
     if (existing.length && existing[existing.length - 1].sha === sha) return
     await putObject(paths.objectsDir, content)
     await appendVersion(logFile, { ts: Date.now(), sha, size: Buffer.byteLength(content, 'utf8') })
-    const trimmed = applyBackstops([...existing, { ts: Date.now(), sha, size: 0 }], Date.now())
-    if (trimmed.length < existing.length + 1) {
-      // Re-read to keep real ts/size then re-trim, then rewrite + gc.
-      const fresh = applyBackstops(await readVersions(logFile), Date.now())
-      await writeVersions(logFile, fresh)
+    const all = await readVersions(logFile)
+    const trimmed = applyBackstops(all, Date.now())
+    if (trimmed.length !== all.length) {
+      await writeVersions(logFile, trimmed)
       await gcAll()
     }
   }
@@ -79,7 +74,7 @@ export function createRecorder(root: string, options: RecorderOptions): Recorder
     const m = maxTimers.get(relPath)
     if (m) clearTimeout(m)
     maxTimers.delete(relPath)
-    void enqueue(relPath, () => capture(relPath))
+    void enqueue(() => capture(relPath))
   }
 
   const scheduleSettle = (relPath: string): void => {
@@ -140,13 +135,8 @@ export function createRecorder(root: string, options: RecorderOptions): Recorder
     if (pruneTimer) clearTimeout(pruneTimer)
     pruneTimer = setTimeout(() => {
       pruneTimer = null
-      prunePending = runPrune()
+      void enqueue(() => runPrune())
     }, PRUNE_DEBOUNCE_MS)
-  }
-
-  const drain = async (): Promise<void> => {
-    await Promise.all([...queues.values()])
-    await prunePending
   }
 
   return {
@@ -156,23 +146,22 @@ export function createRecorder(root: string, options: RecorderOptions): Recorder
       scheduleSettle(relPath)
     },
     async flush() {
-      const pending = new Set<string>([...settleTimers.keys(), ...maxTimers.keys()])
-      for (const relPath of pending) fire(relPath)
+      for (const relPath of new Set([...settleTimers.keys(), ...maxTimers.keys()])) fire(relPath)
       if (pruneTimer) {
         clearTimeout(pruneTimer)
         pruneTimer = null
-        prunePending = runPrune()
+        void enqueue(() => runPrune())
       }
-      await drain()
+      await chain
     },
     async close() {
-      for (const t of settleTimers.values()) clearTimeout(t)
-      for (const t of maxTimers.values()) clearTimeout(t)
-      settleTimers.clear()
-      maxTimers.clear()
-      if (pruneTimer) clearTimeout(pruneTimer)
-      pruneTimer = null
-      await drain()
+      for (const relPath of new Set([...settleTimers.keys(), ...maxTimers.keys()])) fire(relPath)
+      if (pruneTimer) {
+        clearTimeout(pruneTimer)
+        pruneTimer = null
+        void enqueue(() => runPrune())
+      }
+      await chain
     }
   }
 }
