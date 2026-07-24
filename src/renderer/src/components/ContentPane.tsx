@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { ChangedFile, FileContent } from '@shared/types'
+import type { ChangedFile, FileContent, HistoryVersion } from '@shared/types'
+import { isDefaultSelection, type RevisionRef, type Selection } from '../history/selection'
 import CodeView from './CodeView'
 import DiffView from './DiffView'
 import MarkdownView from './MarkdownView'
@@ -16,36 +17,65 @@ function isMarkdown(path: string): boolean {
 
 export default function ContentPane({
   file,
-  refreshKey
+  refreshKey,
+  selection,
+  versions
 }: {
   file: ChangedFile | null
   refreshKey: number
+  selection: Selection
+  versions: HistoryVersion[]
 }): React.JSX.Element {
   const [mode, setMode] = useState<Mode>('view')
   const [sideBySide, setSideBySide] = useState(true)
   const [content, setContent] = useState<FileContent | null>(null)
   const [baseContent, setBaseContent] = useState<string | null>(null)
+  const [compareContent, setCompareContent] = useState<string | null>(null)
 
   // Reset to rendered/view mode when switching files.
   useEffect(() => {
     setMode('view')
   }, [file?.path])
 
+  // A non-default revision selection means "show a diff"; jump into diff mode.
+  useEffect(() => {
+    if (!isDefaultSelection(selection)) setMode((m) => (m === 'view' ? 'diff' : m))
+  }, [selection])
+
+  // Current on-disk content (for view mode + the 'now' ref).
   useEffect(() => {
     if (!file) return
     let stale = false
     void window.viewmaster.readFile(file.absPath).then((c) => {
       if (!stale) setContent(c)
     })
-    if (mode === 'diff' || mode === 'marks') {
-      void window.viewmaster.readBaseFile(file.path).then((base) => {
-        if (!stale) setBaseContent(base)
-      })
-    }
     return () => {
       stale = true
     }
-  }, [file, mode, refreshKey])
+  }, [file, refreshKey])
+
+  // Resolve base/compare sides from the selection when diffing.
+  useEffect(() => {
+    if (!file || (mode !== 'diff' && mode !== 'marks')) return
+    let stale = false
+    const resolve = async (ref: RevisionRef): Promise<string> => {
+      if (ref === 'baseline') return window.viewmaster.readBaseFile(file.path)
+      if (ref === 'now') {
+        const c = await window.viewmaster.readFile(file.absPath)
+        return c.kind === 'text' ? c.content : ''
+      }
+      return window.viewmaster.historyRead(ref.sha)
+    }
+    void resolve(selection.base).then((b) => {
+      if (!stale) setBaseContent(b)
+    })
+    void resolve(selection.compare).then((c) => {
+      if (!stale) setCompareContent(c)
+    })
+    return () => {
+      stale = true
+    }
+  }, [file, mode, selection, refreshKey])
 
   if (!file) {
     return (
@@ -73,22 +103,22 @@ export default function ContentPane({
     body = <Placeholder title="File not found" detail={file.absPath} />
   } else if (mode === 'diff') {
     body =
-      baseContent === null ? (
+      baseContent === null || compareContent === null ? (
         <Placeholder title="Loading diff…" />
       ) : (
         <DiffView
           fileName={fileName}
           original={baseContent}
-          modified={content.content}
+          modified={compareContent}
           sideBySide={sideBySide}
         />
       )
   } else if (mode === 'marks' && isMarkdown(file.path)) {
     body =
-      baseContent === null ? (
+      baseContent === null || compareContent === null ? (
         <Placeholder title="Loading marks…" />
       ) : (
-        <MarkdownView content={content.content} baseContent={baseContent} />
+        <MarkdownView content={compareContent} baseContent={baseContent} />
       )
   } else if (isMarkdown(file.path)) {
     body = <MarkdownView content={content.content} />
