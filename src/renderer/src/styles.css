@@ -489,3 +489,57 @@ body {
   font-size: 12px;
   justify-content: flex-start;
 }
+
+/* ---- editor's marks ---- */
+
+.markdown-body ins {
+  background: rgba(87, 166, 74, 0.28);
+  text-decoration: none;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.markdown-body del {
+  background: rgba(229, 83, 75, 0.22);
+  text-decoration: line-through;
+  text-decoration-color: #e5534b;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.markdown-body .vm-block {
+  margin: 0.9em 0;
+}
+
+.markdown-body .vm-block pre {
+  margin: 0;
+}
+
+.markdown-body .vm-block-del {
+  border-left: 3px solid #e5534b;
+  padding-left: 8px;
+  opacity: 0.62;
+}
+
+.markdown-body .vm-block-ins {
+  border-left: 3px solid #57a64a;
+  padding-left: 8px;
+}
+
+.toolbar-segment {
+  display: inline-flex;
+}
+
+.toolbar-segment .toolbar-button {
+  border-radius: 0;
+  margin-left: -1px;
+}
+
+.toolbar-segment .toolbar-button:first-child {
+  border-radius: 3px 0 0 3px;
+  margin-left: 0;
+}
+
+.toolbar-segment .toolbar-button:last-child {
+  border-radius: 0 3px 3px 0;
+}

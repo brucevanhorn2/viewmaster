@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { shouldIgnore } from './watcher'
+import { afterEach, describe, expect, it } from 'vitest'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { shouldIgnore, watchRepo } from './watcher'
 
 const root = '/repo'
 
@@ -25,5 +28,42 @@ describe('shouldIgnore', () => {
     expect(shouldIgnore(root, '/repo/.git/objects/ab/cdef123')).toBe(true)
     expect(shouldIgnore(root, '/repo/.git/hooks/pre-commit.sample')).toBe(true)
     expect(shouldIgnore(root, '/repo/.git/logs/HEAD')).toBe(true)
+  })
+})
+
+describe('watchRepo', () => {
+  let dir: string
+  const watchers: Array<{ close: () => void }> = []
+
+  afterEach(() => {
+    while (watchers.length) watchers.pop()!.close()
+    if (dir) rmSync(dir, { recursive: true, force: true })
+  })
+
+  const nextChange = (): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const w = watchRepo(dir, resolve)
+      watchers.push(w)
+      setTimeout(() => reject(new Error('no change event within timeout')), 3000)
+    })
+
+  it('fires onChange when a regular file changes', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'vm-watch-'))
+    const done = nextChange()
+    setTimeout(() => writeFileSync(join(dir, 'README.md'), 'hello'), 100)
+    await expect(done).resolves.toBeUndefined()
+  })
+
+  it('does not fire for node_modules churn', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'vm-watch-'))
+    mkdirSync(join(dir, 'node_modules'), { recursive: true })
+    let fired = false
+    const w = watchRepo(dir, () => {
+      fired = true
+    })
+    watchers.push(w)
+    writeFileSync(join(dir, 'node_modules', 'junk.js'), 'x')
+    await new Promise((r) => setTimeout(r, 800))
+    expect(fired).toBe(false)
   })
 })

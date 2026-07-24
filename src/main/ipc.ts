@@ -1,5 +1,5 @@
 import { BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
-import type { FSWatcher } from 'chokidar'
+import type { FSWatcher } from 'fs'
 import type { BaselineKind, FileContent, RepoState } from '@shared/types'
 import { runGit } from './git/run'
 import { resolveBaseline } from './git/baseline'

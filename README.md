@@ -1,4 +1,6 @@
-# viewmaster
+<p align="center">
+  <img src="img/viewmaster.png" alt="viewmaster" width="320">
+</p>
 
 A read-only desktop viewer for **markdown documents** and **branch diffs**.
 
@@ -19,8 +21,12 @@ eyeball what changed on a branch. viewmaster does two things, and only ever
   committed, staged, or modified/untracked — collapsed to just the directories
   that contain changes.
 - File-type icons and status coloring (untracked / modified / staged / committed).
-- Click a **markdown** file → rendered view, with a **Diff toggle** to see the
-  source diff against the branch baseline.
+- Click a **markdown** file → rendered view, with a three-way toggle:
+  **Rendered | Marks | Source**.
+- **Editor's-marks diff (Marks)** — the branch's changes shown as proofreader's
+  marks inline in the *rendered* output: insertions highlighted, deletions
+  struck through. Changed code fences and mermaid diagrams appear as the old
+  block (struck) followed by the new block.
 - Click **any other file** → read-only, syntax-highlighted code with line numbers
   (VS Code's Monaco editor), with a **Diff toggle**.
 - Diffs are **side-by-side** by default, with an inline toggle.
@@ -67,10 +73,7 @@ This is a one-time step per machine. Signing and notarization are on the roadmap
 
 ## Roadmap
 
-- **Rendered word-by-word diff ("editor's marks"):** render markdown with
-  added/removed text marked inline in the rendered output, like a proofreader's
-  marks — instead of a source diff. The dream feature.
-- Side-by-side rendered old-vs-new markdown as an intermediate diff mode.
+- Side-by-side rendered old-vs-new markdown as an alternate diff mode.
 - Code signing + notarization for Gatekeeper-clean, distributable DMGs.
 - Search / filter within the changed-file list.
 - Configurable baseline (compare against an arbitrary branch or ref).
