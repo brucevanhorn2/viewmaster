@@ -905,7 +905,8 @@ In `openRepo`, inside the `state.kind === 'repo'` block, create the recorder and
       if (recomputeTimer) clearTimeout(recomputeTimer)
       recomputeTimer = setTimeout(async () => {
         const fresh = await computeRepoState(watchRoot)
-        if (session?.root === watchRoot && fresh.kind === 'repo') session.baseline = fresh.baseline
+        if (session?.root !== watchRoot) return // repo switched — drop stale update
+        if (fresh.kind === 'repo') session.baseline = fresh.baseline
         const win = getWindow()
         if (win && !win.isDestroyed()) win.webContents.send('repo:changed', fresh)
       }, RECOMPUTE_DEBOUNCE_MS)
