@@ -40,21 +40,21 @@ describe('watchRepo', () => {
     if (dir) rmSync(dir, { recursive: true, force: true })
   })
 
-  const nextChange = (): Promise<void> =>
+  const nextEvent = (): Promise<string | null> =>
     new Promise((resolve, reject) => {
       const w = watchRepo(dir, resolve)
       watchers.push(w)
-      setTimeout(() => reject(new Error('no change event within timeout')), 3000)
+      setTimeout(() => reject(new Error('no event within timeout')), 3000)
     })
 
-  it('fires onChange when a regular file changes', async () => {
+  it('emits the relative path of a changed file', async () => {
     dir = mkdtempSync(join(tmpdir(), 'vm-watch-'))
-    const done = nextChange()
+    const done = nextEvent()
     setTimeout(() => writeFileSync(join(dir, 'README.md'), 'hello'), 100)
-    await expect(done).resolves.toBeUndefined()
+    await expect(done).resolves.toBe('README.md')
   })
 
-  it('does not fire for node_modules churn', async () => {
+  it('does not emit for node_modules churn', async () => {
     dir = mkdtempSync(join(tmpdir(), 'vm-watch-'))
     mkdirSync(join(dir, 'node_modules'), { recursive: true })
     let fired = false

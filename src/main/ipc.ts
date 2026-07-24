@@ -8,6 +8,8 @@ import { readBaseFile, readCurrentFile } from './git/content'
 import { watchRepo } from './watcher'
 import { addRecentFolder, getRecentFolders } from './store'
 
+const RECOMPUTE_DEBOUNCE_MS = 300
+
 interface Session {
   root: string
   baseline: BaselineKind
@@ -50,13 +52,17 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
 
   if (state.kind === 'repo') {
     const watchRoot = state.root
-    const watcher = watchRepo(watchRoot, async () => {
-      const fresh = await computeRepoState(watchRoot)
-      if (session?.root === watchRoot && fresh.kind === 'repo') session.baseline = fresh.baseline
-      // Resolve the window at send time — the window that opened the repo
-      // may have been closed and replaced since.
-      const win = getWindow()
-      if (win && !win.isDestroyed()) win.webContents.send('repo:changed', fresh)
+    let recomputeTimer: NodeJS.Timeout | null = null
+    const watcher = watchRepo(watchRoot, () => {
+      if (recomputeTimer) clearTimeout(recomputeTimer)
+      recomputeTimer = setTimeout(async () => {
+        const fresh = await computeRepoState(watchRoot)
+        if (session?.root === watchRoot && fresh.kind === 'repo') session.baseline = fresh.baseline
+        // Resolve the window at send time — the window that opened the repo
+        // may have been closed and replaced since.
+        const win = getWindow()
+        if (win && !win.isDestroyed()) win.webContents.send('repo:changed', fresh)
+      }, RECOMPUTE_DEBOUNCE_MS)
     })
     session = { root: state.root, baseline: state.baseline, watcher }
   }
