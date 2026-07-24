@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
-import type { ChangedFile, RepoState } from '@shared/types'
+import type { ChangedFile, HistoryVersion, RepoState } from '@shared/types'
 import Sidebar from './components/Sidebar'
 import ContentPane from './components/ContentPane'
+import HistoryPane from './components/HistoryPane'
+import {
+  defaultSelection,
+  singleClickSelection,
+  type RevisionRef,
+  type Selection
+} from './history/selection'
 
 function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Element {
   const [recents, setRecents] = useState<string[]>([])
@@ -42,6 +49,8 @@ export default function App(): React.JSX.Element {
   const [repo, setRepo] = useState<RepoState | null>(null)
   const [selected, setSelected] = useState<ChangedFile | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [versions, setVersions] = useState<HistoryVersion[]>([])
+  const [selection, setSelection] = useState<Selection>(defaultSelection())
 
   const openFolder = useCallback((root: string): void => {
     void window.viewmaster.openRepo(root).then((state) => {
@@ -69,6 +78,37 @@ export default function App(): React.JSX.Element {
     []
   )
 
+  // Reset the revision selection whenever the selected file changes.
+  useEffect(() => {
+    setSelection(defaultSelection())
+  }, [selected?.path])
+
+  // Load local history for the selected file (git repos only), refreshing when
+  // the watcher reports a change.
+  useEffect(() => {
+    if (!selected || repo?.kind !== 'repo') {
+      setVersions([])
+      return
+    }
+    let stale = false
+    void window.viewmaster.historyList(selected.path).then((v) => {
+      if (!stale) setVersions(v)
+    })
+    return () => {
+      stale = true
+    }
+  }, [selected?.path, repo?.kind, refreshKey])
+
+  const onSelectRevision = useCallback(
+    (ref: RevisionRef): void => {
+      setSelection((prev) => {
+        void prev
+        return singleClickSelection(versions, ref)
+      })
+    },
+    [versions]
+  )
+
   if (!repo) {
     return (
       <div className="app">
@@ -81,10 +121,27 @@ export default function App(): React.JSX.Element {
     <div className="app">
       <Allotment defaultSizes={[280, 920]}>
         <Allotment.Pane minSize={180} preferredSize={280}>
-          <Sidebar state={repo} selected={selected?.path ?? null} onSelect={setSelected} />
+          <Allotment vertical>
+            <Allotment.Pane>
+              <Sidebar state={repo} selected={selected?.path ?? null} onSelect={setSelected} />
+            </Allotment.Pane>
+            <Allotment.Pane preferredSize={220} minSize={80}>
+              <HistoryPane
+                versions={versions}
+                selection={selection}
+                isGitRepo={repo?.kind === 'repo'}
+                onSelect={onSelectRevision}
+              />
+            </Allotment.Pane>
+          </Allotment>
         </Allotment.Pane>
         <Allotment.Pane>
-          <ContentPane file={selected} refreshKey={refreshKey} />
+          <ContentPane
+            file={selected}
+            refreshKey={refreshKey}
+            selection={selection}
+            versions={versions}
+          />
         </Allotment.Pane>
       </Allotment>
     </div>
