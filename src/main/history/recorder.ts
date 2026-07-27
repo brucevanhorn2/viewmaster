@@ -31,6 +31,8 @@ export interface Recorder {
 export interface RecorderOptions {
   historyBaseDir: string
   settleMs?: number
+  /** Called with the repo-relative path after a new version is recorded. */
+  onCapture?: (relPath: string) => void
 }
 
 export function createRecorder(root: string, options: RecorderOptions): Recorder {
@@ -65,6 +67,7 @@ export function createRecorder(root: string, options: RecorderOptions): Recorder
       await writeVersions(logFile, trimmed)
       await gcAll()
     }
+    options.onCapture?.(relPath)
   }
 
   const fire = (relPath: string): void => {

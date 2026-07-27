@@ -51,6 +51,7 @@ export default function App(): React.JSX.Element {
   const [refreshKey, setRefreshKey] = useState(0)
   const [versions, setVersions] = useState<HistoryVersion[]>([])
   const [selection, setSelection] = useState<Selection>(defaultSelection())
+  const [historyTick, setHistoryTick] = useState(0)
 
   const openFolder = useCallback((root: string): void => {
     void window.viewmaster.openRepo(root).then((state) => {
@@ -78,6 +79,12 @@ export default function App(): React.JSX.Element {
     []
   )
 
+  // A settle-capture just landed a new version — re-fetch history for the
+  // currently-selected file so the pane updates without waiting for the next
+  // repo change or file switch. (Captures write outside the watched repo, so
+  // they don't otherwise trigger a refresh.)
+  useEffect(() => window.viewmaster.onHistoryChanged(() => setHistoryTick((t) => t + 1)), [])
+
   // Reset the revision selection whenever the selected file changes.
   useEffect(() => {
     setSelection(defaultSelection())
@@ -98,7 +105,7 @@ export default function App(): React.JSX.Element {
     return () => {
       stale = true
     }
-  }, [selected?.path, repo?.kind, refreshKey])
+  }, [selected?.path, repo?.kind, refreshKey, historyTick])
 
   const onSelectRevision = useCallback(
     (ref: RevisionRef): void => {

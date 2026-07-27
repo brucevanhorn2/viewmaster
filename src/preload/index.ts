@@ -24,6 +24,8 @@ const api = {
     subscribe('repo:changed', cb),
   onMenuOpenFolder: (cb: (root: string) => void): (() => void) =>
     subscribe('menu:openFolder', cb),
+  onHistoryChanged: (cb: (relPath: string) => void): (() => void) =>
+    subscribe('history:changed', cb),
   historyList: (relPath: string): Promise<HistoryVersion[]> =>
     ipcRenderer.invoke('history:list', relPath),
   historyRead: (sha: string): Promise<string> => ipcRenderer.invoke('history:read', sha)

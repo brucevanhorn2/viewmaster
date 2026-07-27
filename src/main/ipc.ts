@@ -57,7 +57,13 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
 
   if (state.kind === 'repo') {
     const watchRoot = state.root
-    const recorder = createRecorder(watchRoot, { historyBaseDir: app.getPath('userData') })
+    const recorder = createRecorder(watchRoot, {
+      historyBaseDir: app.getPath('userData'),
+      onCapture: (relPath) => {
+        const win = getWindow()
+        if (win && !win.isDestroyed()) win.webContents.send('history:changed', relPath)
+      }
+    })
     let recomputeTimer: NodeJS.Timeout | null = null
     const watcher = watchRepo(watchRoot, (relPath) => {
       recorder.handleEvent(relPath)

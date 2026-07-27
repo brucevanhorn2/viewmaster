@@ -47,6 +47,31 @@ describe('recorder capture', () => {
     await rec.close()
   })
 
+  it('fires onCapture with the relPath only when a new version is recorded', async () => {
+    await setup()
+    const captured: string[] = []
+    const rec = createRecorder(repo.root, {
+      historyBaseDir: base,
+      settleMs: 5,
+      onCapture: (relPath) => captured.push(relPath)
+    })
+
+    await repo.write('doc.md', 'v1')
+    rec.handleEvent('doc.md')
+    await rec.flush()
+    expect(captured).toEqual(['doc.md'])
+
+    rec.handleEvent('doc.md') // identical content — deduped, no capture
+    await rec.flush()
+    expect(captured).toEqual(['doc.md']) // unchanged
+
+    await repo.write('doc.md', 'v2')
+    rec.handleEvent('doc.md')
+    await rec.flush()
+    expect(captured).toEqual(['doc.md', 'doc.md'])
+    await rec.close()
+  })
+
   it('skips binary files', async () => {
     await setup()
     const rec = createRecorder(repo.root, { historyBaseDir: base, settleMs: 5 })
