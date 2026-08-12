@@ -26,8 +26,9 @@ function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Elem
 
   return (
     <div className="welcome">
-      <h1>viewmaster</h1>
+      <h1>View Master</h1>
       <p>Read-only viewer for markdown documents and branch diffs.</p>
+      <div className="welcome-mark" aria-hidden="true" />
       <button className="open-button" onClick={() => void pick()}>
         Open Folder…
       </button>

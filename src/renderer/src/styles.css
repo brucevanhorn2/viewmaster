@@ -52,6 +52,19 @@ body {
   gap: 8px;
 }
 
+/* The app icon, faint, between the title block and the actions. It reads as a
+   watermark, not as a second logo. The file also feeds the app icon, so the
+   two never drift apart. A CSS background keeps it out of the tab order and
+   needs no alt text. */
+.welcome-mark {
+  width: min(34vh, 260px);
+  aspect-ratio: 1;
+  flex-shrink: 0;
+  margin: 12px 0;
+  background: url('../../../resources/icon.png') center / contain no-repeat;
+  opacity: 0.2;
+}
+
 .welcome h1 {
   font-weight: 300;
   font-size: 32px;

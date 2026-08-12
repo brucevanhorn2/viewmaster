@@ -1,5 +1,5 @@
 appId: com.vanhorn.viewmaster
-productName: viewmaster
+productName: View Master
 directories:
   output: release
   buildResources: resources
