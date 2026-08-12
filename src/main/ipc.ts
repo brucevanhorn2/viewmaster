@@ -1,17 +1,23 @@
-import { BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
-import type { FSWatcher } from 'chokidar'
-import type { BaselineKind, FileContent, RepoState } from '@shared/types'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
+import type { FSWatcher } from 'fs'
+import type { BaselineKind, FileContent, HistoryVersion, RepoState } from '@shared/types'
 import { runGit } from './git/run'
 import { resolveBaseline } from './git/baseline'
 import { collectChanges } from './git/changes'
 import { readBaseFile, readCurrentFile } from './git/content'
 import { watchRepo } from './watcher'
 import { addRecentFolder, getRecentFolders } from './store'
+import { createRecorder, type Recorder } from './history/recorder'
+import { historyPaths } from './history/paths'
+import { getObject, readVersions } from './history/store'
+
+const RECOMPUTE_DEBOUNCE_MS = 300
 
 interface Session {
   root: string
   baseline: BaselineKind
   watcher: FSWatcher
+  recorder: Recorder | null
 }
 
 let session: Session | null = null
@@ -19,6 +25,7 @@ let session: Session | null = null
 async function closeSession(): Promise<void> {
   if (session) {
     await session.watcher.close()
+    if (session.recorder) await session.recorder.close()
     session = null
   }
 }
@@ -50,15 +57,28 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
 
   if (state.kind === 'repo') {
     const watchRoot = state.root
-    const watcher = watchRepo(watchRoot, async () => {
-      const fresh = await computeRepoState(watchRoot)
-      if (session?.root === watchRoot && fresh.kind === 'repo') session.baseline = fresh.baseline
-      // Resolve the window at send time — the window that opened the repo
-      // may have been closed and replaced since.
-      const win = getWindow()
-      if (win && !win.isDestroyed()) win.webContents.send('repo:changed', fresh)
+    const recorder = createRecorder(watchRoot, {
+      historyBaseDir: app.getPath('userData'),
+      onCapture: (relPath) => {
+        const win = getWindow()
+        if (win && !win.isDestroyed()) win.webContents.send('history:changed', relPath)
+      }
     })
-    session = { root: state.root, baseline: state.baseline, watcher }
+    let recomputeTimer: NodeJS.Timeout | null = null
+    const watcher = watchRepo(watchRoot, (relPath) => {
+      recorder.handleEvent(relPath)
+      if (recomputeTimer) clearTimeout(recomputeTimer)
+      recomputeTimer = setTimeout(async () => {
+        const fresh = await computeRepoState(watchRoot)
+        if (session?.root !== watchRoot) return // repo switched — drop stale update
+        if (fresh.kind === 'repo') session.baseline = fresh.baseline
+        // Resolve the window at send time — the window that opened the repo
+        // may have been closed and replaced since.
+        const win = getWindow()
+        if (win && !win.isDestroyed()) win.webContents.send('repo:changed', fresh)
+      }, RECOMPUTE_DEBOUNCE_MS)
+    })
+    session = { root: state.root, baseline: state.baseline, watcher, recorder }
   }
 
   return state
@@ -103,6 +123,22 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
 
   ipcMain.handle('app:openExternal', (_e, url: string): void => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)
+  })
+
+  ipcMain.handle('history:list', async (_e, relPath: string): Promise<HistoryVersion[]> => {
+    if (!session) return []
+    const paths = historyPaths(app.getPath('userData'), session.root)
+    return readVersions(paths.logFile(relPath))
+  })
+
+  ipcMain.handle('history:read', async (_e, sha: string): Promise<string> => {
+    if (!session) return ''
+    const paths = historyPaths(app.getPath('userData'), session.root)
+    try {
+      return await getObject(paths.objectsDir, sha)
+    } catch {
+      return ''
+    }
   })
 }
 

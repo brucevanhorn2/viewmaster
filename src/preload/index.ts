@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { FileContent, RepoState } from '@shared/types'
+import type { FileContent, HistoryVersion, RepoState } from '@shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_e: Electron.IpcRendererEvent, payload: T): void => cb(payload)
@@ -23,7 +23,12 @@ const api = {
   onRepoChanged: (cb: (state: RepoState) => void): (() => void) =>
     subscribe('repo:changed', cb),
   onMenuOpenFolder: (cb: (root: string) => void): (() => void) =>
-    subscribe('menu:openFolder', cb)
+    subscribe('menu:openFolder', cb),
+  onHistoryChanged: (cb: (relPath: string) => void): (() => void) =>
+    subscribe('history:changed', cb),
+  historyList: (relPath: string): Promise<HistoryVersion[]> =>
+    ipcRenderer.invoke('history:list', relPath),
+  historyRead: (sha: string): Promise<string> => ipcRenderer.invoke('history:read', sha)
 }
 
 export type ViewmasterApi = typeof api

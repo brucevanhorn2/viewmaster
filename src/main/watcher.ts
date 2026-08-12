@@ -1,7 +1,5 @@
-import { watch, type FSWatcher } from 'chokidar'
-import { join, relative, sep } from 'path'
-
-const DEBOUNCE_MS = 300
+import { watch, type FSWatcher } from 'fs'
+import { basename, join, relative, sep } from 'path'
 
 /**
  * Watch predicate: skip node_modules and noisy .git internals, but keep
@@ -21,18 +19,23 @@ export function shouldIgnore(root: string, path: string): boolean {
   return false
 }
 
-/** Watch a repo and invoke `onChange` debounced after any relevant fs event. */
-export function watchRepo(root: string, onChange: () => void): FSWatcher {
-  const watcher = watch(root, {
-    ignoreInitial: true,
-    ignored: (path: string) => shouldIgnore(root, path)
+/**
+ * Watch a repo and invoke `onEvent(relPath)` for each relevant fs change,
+ * where relPath is repo-relative with forward slashes (null when the platform
+ * gives no filename). Single native recursive fs.watch handle — no per-dir fds,
+ * no EMFILE. Debouncing is left to the caller.
+ */
+export function watchRepo(root: string, onEvent: (relPath: string | null) => void): FSWatcher {
+  const rootName = basename(root)
+
+  const watcher = watch(root, { recursive: true, persistent: true }, (_event, filename) => {
+    if (filename === null) return onEvent(null)
+    const name = filename.toString()
+    if (name === rootName) return // spurious macOS aggregate event
+    if (shouldIgnore(root, join(root, name))) return
+    onEvent(name.split(sep).join('/'))
   })
 
-  let timer: NodeJS.Timeout | null = null
-  watcher.on('all', () => {
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(onChange, DEBOUNCE_MS)
-  })
-
+  watcher.on('error', () => {})
   return watcher
 }

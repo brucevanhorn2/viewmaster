@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, dialog, shell } from 'electron'
 import { join } from 'path'
 import { registerIpc, disposeIpc } from './ipc'
 import { getRecentFolders, getWindowBounds, setWindowBounds } from './store'
+import icon from '../../resources/icon.png?asset'
 
 // The single app window. Resolved at *use* time everywhere (menu clicks,
 // watcher pushes, dialogs) — capturing a BrowserWindow in a closure goes
@@ -62,6 +63,9 @@ function createWindow(): BrowserWindow {
     minWidth: 600,
     minHeight: 400,
     backgroundColor: '#1e1e1e',
+    // macOS ignores this and uses the app bundle / dock icon (set below);
+    // Linux and Windows take the window icon from here.
+    ...(process.platform !== 'darwin' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -104,6 +108,11 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // Show the icon in the macOS dock during `npm run dev` — the dev process runs
+  // bare Electron. Packaged builds get it from the app bundle (electron-builder
+  // generates the icns from resources/icon.png), and resources/ isn't shipped
+  // inside the package, so only do this unpackaged to avoid a missing-file path.
+  if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(icon)
   createWindow()
   // Rebuild the menu when a repo opens so the recent-folders submenu stays fresh.
   registerIpc(getMainWindow, () => buildMenu())

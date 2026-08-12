@@ -1,4 +1,6 @@
-# viewmaster
+<p align="center">
+  <img src="img/viewmaster.png" alt="viewmaster" width="320">
+</p>
 
 A read-only desktop viewer for **markdown documents** and **branch diffs**.
 
