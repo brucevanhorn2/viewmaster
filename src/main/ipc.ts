@@ -10,12 +10,13 @@ import { addRecentFolder, getRecentFolders } from './store'
 import { createRecorder, type Recorder } from './history/recorder'
 import { historyPaths } from './history/paths'
 import { getObject, readVersions } from './history/store'
+import { listFolderTree, toUnchangedFiles } from './files/browse'
 
 const RECOMPUTE_DEBOUNCE_MS = 300
 
 interface Session {
   root: string
-  baseline: BaselineKind
+  baseline: BaselineKind | null
   watcher: FSWatcher
   recorder: Recorder | null
 }
@@ -33,7 +34,8 @@ async function closeSession(): Promise<void> {
 async function computeRepoState(root: string): Promise<RepoState> {
   const inside = await runGit(root, ['rev-parse', '--is-inside-work-tree'])
   if (inside.code !== 0 || inside.stdout.trim() !== 'true') {
-    return { kind: 'not-git', root }
+    const paths = await listFolderTree(root)
+    return { kind: 'folder', root, files: toUnchangedFiles(root, paths) }
   }
   const toplevel = await runGit(root, ['rev-parse', '--show-toplevel'])
   const repoRoot = toplevel.code === 0 ? toplevel.stdout.trim() : root
@@ -53,20 +55,23 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
   await closeSession()
   const state = await computeRepoState(root)
 
-  if (state.kind !== 'not-git') addRecentFolder(state.root)
+  if (state.kind !== 'error') addRecentFolder(state.root)
 
-  if (state.kind === 'repo') {
+  if (state.kind === 'repo' || state.kind === 'folder') {
     const watchRoot = state.root
-    const recorder = createRecorder(watchRoot, {
-      historyBaseDir: app.getPath('userData'),
-      onCapture: (relPath) => {
-        const win = getWindow()
-        if (win && !win.isDestroyed()) win.webContents.send('history:changed', relPath)
-      }
-    })
+    const recorder =
+      state.kind === 'repo'
+        ? createRecorder(watchRoot, {
+            historyBaseDir: app.getPath('userData'),
+            onCapture: (relPath) => {
+              const win = getWindow()
+              if (win && !win.isDestroyed()) win.webContents.send('history:changed', relPath)
+            }
+          })
+        : null
     let recomputeTimer: NodeJS.Timeout | null = null
     const watcher = watchRepo(watchRoot, (relPath) => {
-      recorder.handleEvent(relPath)
+      recorder?.handleEvent(relPath)
       if (recomputeTimer) clearTimeout(recomputeTimer)
       recomputeTimer = setTimeout(async () => {
         const fresh = await computeRepoState(watchRoot)
@@ -78,7 +83,12 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
         if (win && !win.isDestroyed()) win.webContents.send('repo:changed', fresh)
       }, RECOMPUTE_DEBOUNCE_MS)
     })
-    session = { root: state.root, baseline: state.baseline, watcher, recorder }
+    session = {
+      root: state.root,
+      baseline: state.kind === 'repo' ? state.baseline : null,
+      watcher,
+      recorder
+    }
   }
 
   return state
@@ -107,7 +117,7 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
   ipcMain.handle('file:read', (_e, absPath: string): Promise<FileContent> => readCurrentFile(absPath))
 
   ipcMain.handle('file:readBase', async (_e, relPath: string): Promise<string> => {
-    if (!session) return ''
+    if (!session || !session.baseline) return ''
     const { root, baseline } = session
     // In working-only mode diff against HEAD (if any) so staged/modified
     // files still have a meaningful old side; untracked paths yield ''.

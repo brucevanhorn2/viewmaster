@@ -1,4 +1,4 @@
-export type FileStatus = 'untracked' | 'modified' | 'staged' | 'committed'
+export type FileStatus = 'untracked' | 'modified' | 'staged' | 'committed' | 'unchanged'
 
 /** Priority order for primary status: highest ("most live") wins. */
 export const STATUS_PRIORITY: FileStatus[] = ['untracked', 'modified', 'staged', 'committed']
@@ -23,7 +23,7 @@ export type BaselineKind =
 
 export type RepoState =
   | { kind: 'repo'; root: string; baseline: BaselineKind; files: ChangedFile[] }
-  | { kind: 'not-git'; root: string }
+  | { kind: 'folder'; root: string; files: ChangedFile[] }
   | { kind: 'error'; root: string; message: string }
 
 export type FileContent =

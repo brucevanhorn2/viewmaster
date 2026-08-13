@@ -70,7 +70,7 @@ export default function App(): React.JSX.Element {
       window.viewmaster.onRepoChanged((state) => {
         setRepo(state)
         setRefreshKey((k) => k + 1)
-        if (state.kind === 'repo') {
+        if (state.kind === 'repo' || state.kind === 'folder') {
           setSelected((current) => {
             if (!current) return current
             return state.files.find((f) => f.path === current.path) ?? current

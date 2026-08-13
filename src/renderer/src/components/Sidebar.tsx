@@ -7,7 +7,8 @@ const STATUS_LETTER: Record<FileStatus, string> = {
   untracked: 'U',
   modified: 'M',
   staged: 'S',
-  committed: 'C'
+  committed: 'C',
+  unchanged: ''
 }
 
 interface ContextMenuState {
@@ -52,10 +53,12 @@ function FileRow({
     >
       <img className="file-icon" src={fileIconUrl(name)} alt="" />
       <span className="file-name">{name}</span>
-      <span className="status-badge">
-        {STATUS_LETTER[file.status]}
-        {file.secondary && <span className="status-secondary">·{STATUS_LETTER[file.secondary]}</span>}
-      </span>
+      {file.status !== 'unchanged' && (
+        <span className="status-badge">
+          {STATUS_LETTER[file.status]}
+          {file.secondary && <span className="status-secondary">·{STATUS_LETTER[file.secondary]}</span>}
+        </span>
+      )}
     </div>
   )
 }
@@ -160,20 +163,9 @@ export default function Sidebar({
   }, [menu])
 
   const tree = useMemo(
-    () => (state.kind === 'repo' ? buildTree(state.files) : null),
+    () => (state.kind === 'repo' || state.kind === 'folder' ? buildTree(state.files) : null),
     [state]
   )
-
-  if (state.kind === 'not-git') {
-    return (
-      <div className="sidebar">
-        <div className="sidebar-message">
-          Not a git repository
-          <div className="sidebar-message-detail">{state.root}</div>
-        </div>
-      </div>
-    )
-  }
 
   if (state.kind === 'error') {
     return (
@@ -192,14 +184,16 @@ export default function Sidebar({
     setMenu({ x: e.clientX, y: e.clientY, file })
   }
 
+  const emptyMessage = state.kind === 'folder' ? 'No files to show' : 'No changes in this branch'
+
   return (
     <div className="sidebar">
       <div className="sidebar-header" title={state.root}>
-        {baselineLabel(state)}
+        {state.kind === 'folder' ? state.root : baselineLabel(state)}
       </div>
       <div className="sidebar-tree">
         {tree && tree.dirs.length === 0 && tree.files.length === 0 ? (
-          <div className="sidebar-message">No changes in this branch</div>
+          <div className="sidebar-message">{emptyMessage}</div>
         ) : (
           tree && (
             <Children

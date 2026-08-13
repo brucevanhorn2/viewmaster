@@ -1,0 +1,70 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises'
+import { tmpdir } from 'os'
+import { join, dirname } from 'path'
+import { listFolderTree, toUnchangedFiles } from './browse'
+
+let dir: string
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'viewmaster-folder-'))
+})
+
+afterEach(async () => {
+  await rm(dir, { recursive: true, force: true })
+})
+
+async function write(rel: string, content = ''): Promise<void> {
+  const abs = join(dir, rel)
+  await mkdir(dirname(abs), { recursive: true })
+  await writeFile(abs, content)
+}
+
+describe('listFolderTree', () => {
+  it('lists every file when there is no .gitignore', async () => {
+    await write('a.md', 'a')
+    await write('sub/b.md', 'b')
+
+    expect(await listFolderTree(dir)).toEqual(['a.md', 'sub/b.md'])
+  })
+
+  it('excludes files matching a root .gitignore pattern', async () => {
+    await write('.gitignore', '*.log\n')
+    await write('keep.md', 'k')
+    await write('debug.log', 'd')
+
+    expect(await listFolderTree(dir)).toEqual(['.gitignore', 'keep.md'])
+  })
+
+  it('excludes an entire directory matched by a trailing-slash pattern', async () => {
+    await write('.gitignore', 'node_modules/\n')
+    await write('node_modules/pkg/index.js', 'x')
+    await write('src/app.ts', 'y')
+
+    expect(await listFolderTree(dir)).toEqual(['.gitignore', 'src/app.ts'])
+  })
+
+  it('always excludes .git even without a .gitignore', async () => {
+    await write('.git/HEAD', 'ref: refs/heads/main')
+    await write('README.md', 'r')
+
+    expect(await listFolderTree(dir)).toEqual(['README.md'])
+  })
+
+  it('sorts results by path', async () => {
+    await write('zebra.txt', 'z')
+    await write('alpha.txt', 'a')
+    await write('mid/beta.txt', 'b')
+
+    expect(await listFolderTree(dir)).toEqual(['alpha.txt', 'mid/beta.txt', 'zebra.txt'])
+  })
+})
+
+describe('toUnchangedFiles', () => {
+  it('maps paths to unchanged ChangedFile entries', () => {
+    expect(toUnchangedFiles('/vault', ['a.md', 'sub/b.md'])).toEqual([
+      { path: 'a.md', absPath: join('/vault', 'a.md'), status: 'unchanged' },
+      { path: 'sub/b.md', absPath: join('/vault', 'sub/b.md'), status: 'unchanged' }
+    ])
+  })
+})
