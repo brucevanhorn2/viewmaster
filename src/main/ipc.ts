@@ -142,9 +142,11 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
 
   ipcMain.handle('mode:set', async (_e, mode: SidebarMode): Promise<RepoState | null> => {
     if (!session) return null
+    const root = session.root
     session.mode = mode
-    setFolderMode(session.root, mode)
-    const fresh = await computeRepoState(session.root, mode)
+    setFolderMode(root, mode)
+    const fresh = await computeRepoState(root, mode)
+    if (session?.root !== root) return null // repo switched mid-compute — drop stale update
     if (fresh.kind === 'repo') session.baseline = fresh.baseline
     return fresh
   })
