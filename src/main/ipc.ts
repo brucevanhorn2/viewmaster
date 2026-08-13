@@ -11,6 +11,7 @@ import { createRecorder, type Recorder } from './history/recorder'
 import { historyPaths } from './history/paths'
 import { getObject, readVersions } from './history/store'
 import { browseFiles, listFolderTree, toUnchangedFiles } from './files/browse'
+import { readResource } from './files/resource'
 
 const RECOMPUTE_DEBOUNCE_MS = 300
 
@@ -172,6 +173,11 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     // files still have a meaningful old side; untracked paths yield ''.
     const base = baseline.kind === 'merge-base' ? baseline.base : 'HEAD'
     return readBaseFile(root, base, relPath)
+  })
+
+  ipcMain.handle('file:readResource', (_e, absPath: string): Promise<{ base64: string; mime: string } | null> => {
+    if (!session) return Promise.resolve(null)
+    return readResource(absPath, session.root)
   })
 
   ipcMain.handle('app:recentFolders', (): string[] => getRecentFolders())
