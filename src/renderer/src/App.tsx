@@ -12,6 +12,16 @@ import {
   type Selection
 } from './history/selection'
 
+/** Re-resolve the selected file's object against a fresh RepoState, keeping the same file selected. */
+function reconcileSelected(
+  state: RepoState,
+  current: ChangedFile | null
+): ChangedFile | null {
+  if (!current) return current
+  if (state.kind !== 'repo' && state.kind !== 'folder') return current
+  return state.files.find((f) => f.path === current.path) ?? current
+}
+
 function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Element {
   const [recents, setRecents] = useState<string[]>([])
 
@@ -63,7 +73,9 @@ export default function App(): React.JSX.Element {
 
   const setMode = useCallback((mode: SidebarMode): void => {
     void window.viewmaster.setMode(mode).then((state) => {
-      if (state) setRepo(state)
+      if (!state) return
+      setRepo(state)
+      setSelected((current) => reconcileSelected(state, current))
     })
   }, [])
 
@@ -76,12 +88,7 @@ export default function App(): React.JSX.Element {
       window.viewmaster.onRepoChanged((state) => {
         setRepo(state)
         setRefreshKey((k) => k + 1)
-        if (state.kind === 'repo' || state.kind === 'folder') {
-          setSelected((current) => {
-            if (!current) return current
-            return state.files.find((f) => f.path === current.path) ?? current
-          })
-        }
+        setSelected((current) => reconcileSelected(state, current))
       }),
     []
   )

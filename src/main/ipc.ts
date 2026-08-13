@@ -32,9 +32,32 @@ async function closeSession(): Promise<void> {
   }
 }
 
-async function computeRepoState(root: string, mode: SidebarMode): Promise<RepoState> {
+/** The git toplevel for `root`, or null when `root` isn't inside a git work tree. */
+interface RootResolution {
+  gitRoot: string | null
+}
+
+async function resolveRoot(root: string): Promise<RootResolution> {
   const inside = await runGit(root, ['rev-parse', '--is-inside-work-tree'])
-  if (inside.code !== 0 || inside.stdout.trim() !== 'true') {
+  if (inside.code !== 0 || inside.stdout.trim() !== 'true') return { gitRoot: null }
+  const toplevel = await runGit(root, ['rev-parse', '--show-toplevel'])
+  return { gitRoot: toplevel.code === 0 ? toplevel.stdout.trim() : root }
+}
+
+/**
+ * `resolved` lets a caller that already ran resolveRoot (e.g. openRepo, which
+ * needs it to look up the persisted mode before this can run) skip a second,
+ * identical pair of `rev-parse` calls. Callers that don't have it yet (the
+ * watcher's recompute, repo:refresh, mode:set) resolve fresh each time, which
+ * also re-detects a folder session that became a git repo since it opened.
+ */
+async function computeRepoState(
+  root: string,
+  mode: SidebarMode,
+  resolved?: RootResolution
+): Promise<RepoState> {
+  const { gitRoot } = resolved ?? (await resolveRoot(root))
+  if (gitRoot === null) {
     try {
       const paths = await listFolderTree(root)
       return { kind: 'folder', root, files: toUnchangedFiles(root, paths) }
@@ -42,39 +65,27 @@ async function computeRepoState(root: string, mode: SidebarMode): Promise<RepoSt
       return { kind: 'error', root, message: err instanceof Error ? err.message : String(err) }
     }
   }
-  const toplevel = await runGit(root, ['rev-parse', '--show-toplevel'])
-  const repoRoot = toplevel.code === 0 ? toplevel.stdout.trim() : root
 
   try {
-    const baseline = await resolveBaseline(repoRoot)
+    const baseline = await resolveBaseline(gitRoot)
     if (mode === 'changed') {
-      const files = await collectChanges(repoRoot, baseline)
-      return { kind: 'repo', root: repoRoot, baseline, mode, files }
+      const files = await collectChanges(gitRoot, baseline)
+      return { kind: 'repo', root: gitRoot, baseline, mode, files }
     }
-    const files = await browseFiles(repoRoot, baseline)
-    return { kind: 'repo', root: repoRoot, baseline, mode, files }
+    const files = await browseFiles(gitRoot, baseline)
+    return { kind: 'repo', root: gitRoot, baseline, mode, files }
   } catch (err) {
-    return { kind: 'error', root: repoRoot, message: err instanceof Error ? err.message : String(err) }
+    return { kind: 'error', root: gitRoot, message: err instanceof Error ? err.message : String(err) }
   }
-}
-
-/**
- * Resolve the key used for persisted per-folder mode: the git toplevel for a
- * repo, the raw path otherwise. A second, cheap `rev-parse` call — kept
- * separate from computeRepoState so mode can be looked up before the first
- * real computation runs.
- */
-async function resolveModeKey(root: string): Promise<string> {
-  const toplevel = await runGit(root, ['rev-parse', '--show-toplevel'])
-  return toplevel.code === 0 ? toplevel.stdout.trim() : root
 }
 
 type WindowGetter = () => BrowserWindow | null
 
 async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoState> {
   await closeSession()
-  const mode = getFolderMode(await resolveModeKey(root))
-  const state = await computeRepoState(root, mode)
+  const resolved = await resolveRoot(root)
+  const mode = getFolderMode(resolved.gitRoot ?? root)
+  const state = await computeRepoState(root, mode, resolved)
 
   if (state.kind !== 'error') addRecentFolder(state.root)
 

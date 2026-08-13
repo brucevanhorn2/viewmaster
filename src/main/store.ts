@@ -31,7 +31,19 @@ export function getRecentFolders(): string[] {
 export function addRecentFolder(root: string): void {
   const recents = store.get('recentFolders').filter((r) => r !== root)
   recents.unshift(root)
-  store.set('recentFolders', recents.slice(0, MAX_RECENT))
+  const capped = recents.slice(0, MAX_RECENT)
+  store.set('recentFolders', capped)
+  pruneFolderModes(capped)
+}
+
+/** Keep folderModes bounded by tying its lifetime to the capped recents list — a folder that ages out of recents loses its remembered mode too. */
+function pruneFolderModes(keepRoots: string[]): void {
+  const keep = new Set(keepRoots)
+  const modes = store.get('folderModes')
+  const pruned = Object.fromEntries(Object.entries(modes).filter(([root]) => keep.has(root)))
+  if (Object.keys(pruned).length !== Object.keys(modes).length) {
+    store.set('folderModes', pruned)
+  }
 }
 
 export function getWindowBounds(): WindowBounds {
