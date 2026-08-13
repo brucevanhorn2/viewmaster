@@ -23,6 +23,9 @@ const api = {
   openExternal: (url: string): void => {
     void ipcRenderer.invoke('app:openExternal', url)
   },
+  openInBrowser: (absPath: string): void => {
+    void ipcRenderer.invoke('app:openInBrowser', absPath)
+  },
   onRepoChanged: (cb: (state: RepoState) => void): (() => void) =>
     subscribe('repo:changed', cb),
   onMenuOpenFolder: (cb: (root: string) => void): (() => void) =>

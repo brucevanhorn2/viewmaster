@@ -190,6 +190,10 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)
   })
 
+  ipcMain.handle('app:openInBrowser', (_e, absPath: string): void => {
+    void shell.openPath(absPath)
+  })
+
   ipcMain.handle('history:list', async (_e, relPath: string): Promise<HistoryVersion[]> => {
     if (!session) return []
     const paths = historyPaths(app.getPath('userData'), session.root)
