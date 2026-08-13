@@ -128,6 +128,25 @@ export default function App(): React.JSX.Element {
     [versions]
   )
 
+  const onNavigateToFile = useCallback(
+    (absPath: string): void => {
+      if (!repo || (repo.kind !== 'repo' && repo.kind !== 'folder')) return
+      const existing = repo.files.find((f) => f.absPath === absPath)
+      if (existing) {
+        setSelected(existing)
+        return
+      }
+      // Linked file has no git-changed entry in the current listing (e.g.
+      // Changed mode with an untouched target) — synthesize the same shape
+      // Browse Mode's overlayStatus already gives unchanged files.
+      const rel = absPath.startsWith(repo.root)
+        ? absPath.slice(repo.root.length).replace(/^\/+/, '')
+        : absPath
+      setSelected({ path: rel, absPath, status: 'unchanged' })
+    },
+    [repo]
+  )
+
   if (!repo) {
     return (
       <div className="app">
@@ -165,6 +184,8 @@ export default function App(): React.JSX.Element {
             refreshKey={refreshKey}
             selection={selection}
             versions={versions}
+            workspaceRoot={repo?.root ?? ''}
+            onNavigate={onNavigateToFile}
           />
         </Allotment.Pane>
       </Allotment>
