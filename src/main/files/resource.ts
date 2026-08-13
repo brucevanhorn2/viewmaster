@@ -1,4 +1,4 @@
-import { readFile, stat } from 'fs/promises'
+import { readFile, realpath, stat } from 'fs/promises'
 import { extname, isAbsolute, relative, resolve } from 'path'
 
 const MAX_RESOURCE_SIZE = 10 * 1024 * 1024
@@ -38,12 +38,23 @@ export async function readResource(
   absPath: string,
   workspaceRoot: string
 ): Promise<{ base64: string; mime: string } | null> {
-  const resolved = resolve(absPath)
-  if (!isInsideRoot(resolved, resolve(workspaceRoot))) return null
+  // Resolve to real paths (following symlinks) to prevent symlink escape attacks
+  let realAbsPath: string
+  let realRoot: string
+  try {
+    realAbsPath = await realpath(absPath)
+    realRoot = await realpath(workspaceRoot)
+  } catch {
+    // realpath fails on missing files or broken symlinks
+    return null
+  }
+
+  // Check that the real path is inside the real workspace root
+  if (!isInsideRoot(realAbsPath, realRoot)) return null
 
   let size: number
   try {
-    const info = await stat(resolved)
+    const info = await stat(realAbsPath)
     if (!info.isFile()) return null
     size = info.size
   } catch {
@@ -52,8 +63,8 @@ export async function readResource(
   if (size > MAX_RESOURCE_SIZE) return null
 
   try {
-    const buffer = await readFile(resolved)
-    return { base64: buffer.toString('base64'), mime: mimeFor(resolved) }
+    const buffer = await readFile(realAbsPath)
+    return { base64: buffer.toString('base64'), mime: mimeFor(realAbsPath) }
   } catch {
     return null
   }

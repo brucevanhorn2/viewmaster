@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises'
+import { mkdtemp, mkdir, rm, writeFile, symlink } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join, dirname } from 'path'
 import { readResource } from './resource'
@@ -65,6 +65,23 @@ describe('readResource', () => {
     await writeFile(evilFile, 'x')
     expect(await readResource(evilFile, dir)).toBeNull()
     await rm(evilRoot, { recursive: true, force: true })
+  })
+
+  it('rejects a symlink pointing outside the workspace root', async () => {
+    // Create a file outside the workspace
+    const outsideDir = await mkdtemp(join(tmpdir(), 'viewmaster-symlink-target-'))
+    const outsideFile = join(outsideDir, 'secret.png')
+    await writeFile(outsideFile, 'x')
+
+    // Create a symlink inside the workspace pointing to the outside file
+    const symlinkPath = join(dir, 'evil-link.png')
+    try {
+      await symlink(outsideFile, symlinkPath)
+      // Symlink should be rejected even though the link itself is inside the workspace
+      expect(await readResource(symlinkPath, dir)).toBeNull()
+    } finally {
+      await rm(outsideDir, { recursive: true, force: true })
+    }
   })
 
   it('returns null for a missing file', async () => {
