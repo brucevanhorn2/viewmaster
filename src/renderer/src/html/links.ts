@@ -22,6 +22,10 @@ export function classifyLinkHref(
   if (withoutFragment === '') return { kind: 'noop' }
   // Any other URI scheme (mailto:, tel:, javascript:, data:, ...) is inert here.
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(withoutFragment)) return { kind: 'noop' }
+  // Protocol-relative ("//host/path") inherits whatever scheme the page loads
+  // under — it's an external URL, not a local path, even though it starts
+  // with "/" like a workspace-root-relative href does below.
+  if (withoutFragment.startsWith('//')) return { kind: 'external', url: `https:${withoutFragment}` }
 
   const base = withoutFragment.startsWith('/') ? workspaceRoot : dirnamePath(htmlAbsPath)
   const rel = withoutFragment.startsWith('/') ? withoutFragment.slice(1) : withoutFragment

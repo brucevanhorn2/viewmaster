@@ -5,6 +5,7 @@ import type { ChangedFile, HistoryVersion, RepoState, SidebarMode } from '@share
 import Sidebar from './components/Sidebar'
 import ContentPane from './components/ContentPane'
 import HistoryPane from './components/HistoryPane'
+import { isInsideRoot } from './html/paths'
 import {
   defaultSelection,
   singleClickSelection,
@@ -139,7 +140,7 @@ export default function App(): React.JSX.Element {
       // Linked file has no git-changed entry in the current listing (e.g.
       // Changed mode with an untouched target) — synthesize the same shape
       // Browse Mode's overlayStatus already gives unchanged files.
-      const rel = absPath.startsWith(repo.root)
+      const rel = isInsideRoot(absPath, repo.root)
         ? absPath.slice(repo.root.length).replace(/^\/+/, '')
         : absPath
       setSelected({ path: rel, absPath, status: 'unchanged' })

@@ -55,4 +55,11 @@ describe('classifyLinkHref', () => {
   it('no-ops an empty href', () => {
     expect(classifyLinkHref('', HTML_PATH, ROOT)).toEqual({ kind: 'noop' })
   })
+
+  it('classifies a protocol-relative link as external, not an in-workspace navigate', () => {
+    expect(classifyLinkHref('//cdn.example.com/x', HTML_PATH, ROOT)).toEqual({
+      kind: 'external',
+      url: 'https://cdn.example.com/x'
+    })
+  })
 })
