@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises'
+import { mkdtemp, mkdir, rm, writeFile, chmod } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join, dirname } from 'path'
-import { listFolderTree, listGitTree, overlayStatus, toUnchangedFiles } from './browse'
+import { browseFiles, listFolderTree, listGitTree, overlayStatus, toUnchangedFiles } from './browse'
 import { makeRepo, type TestRepo } from '../git/testRepo'
+import type { BaselineKind } from '@shared/types'
 
 let dir: string
 
@@ -64,6 +65,20 @@ describe('listFolderTree', () => {
     const nonexistent = join(tmpdir(), 'nonexistent-folder-' + Math.random())
     await expect(listFolderTree(nonexistent)).rejects.toThrow()
   })
+
+  it('skips an unreadable subdirectory instead of failing the whole listing', async () => {
+    await write('readable.md', 'r')
+    await mkdir(join(dir, 'locked'))
+    await writeFile(join(dir, 'locked', 'secret.md'), 's')
+    await chmod(join(dir, 'locked'), 0o000)
+
+    try {
+      expect(await listFolderTree(dir)).toEqual(['readable.md'])
+    } finally {
+      // Restore permissions so the temp dir can be cleaned up in afterEach.
+      await chmod(join(dir, 'locked'), 0o755)
+    }
+  })
 })
 
 describe('toUnchangedFiles', () => {
@@ -105,6 +120,36 @@ describe('overlayStatus', () => {
     expect(overlayStatus('/r', ['b.txt', 'a.txt'], changed)).toEqual([
       { path: 'a.txt', absPath: '/r/a.txt', status: 'modified' },
       { path: 'b.txt', absPath: '/r/b.txt', status: 'unchanged' }
+    ])
+  })
+})
+
+describe('browseFiles', () => {
+  let repo: TestRepo
+
+  beforeEach(async () => {
+    repo = await makeRepo()
+  })
+
+  afterEach(async () => {
+    await repo.cleanup()
+  })
+
+  it('composes listGitTree + collectChanges + overlayStatus for a git repo', async () => {
+    await repo.write('committed.txt', 'original')
+    await repo.write('untouched.txt', 'same')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'init')
+    await repo.write('committed.txt', 'edited') // committed-then-modified
+    await repo.write('untracked.txt', 'new') // untracked, not ignored
+
+    const baseline: BaselineKind = { kind: 'working-only', reason: 'no-baseline' }
+    const files = await browseFiles(repo.root, baseline)
+
+    expect(files).toEqual([
+      { path: 'committed.txt', absPath: join(repo.root, 'committed.txt'), status: 'modified' },
+      { path: 'untouched.txt', absPath: join(repo.root, 'untouched.txt'), status: 'unchanged' },
+      { path: 'untracked.txt', absPath: join(repo.root, 'untracked.txt'), status: 'untracked' }
     ])
   })
 })

@@ -173,7 +173,7 @@ export default function Sidebar({
     return (
       <div className="sidebar">
         <div className="sidebar-message">
-          Git error
+          Couldn&apos;t open folder
           <div className="sidebar-message-detail">{state.message}</div>
         </div>
       </div>
@@ -186,7 +186,10 @@ export default function Sidebar({
     setMenu({ x: e.clientX, y: e.clientY, file })
   }
 
-  const emptyMessage = state.kind === 'folder' ? 'No files to show' : 'No changes in this branch'
+  const emptyMessage =
+    state.kind === 'folder' || (state.kind === 'repo' && state.mode === 'browse')
+      ? 'No files to show'
+      : 'No changes in this branch'
 
   return (
     <div className="sidebar">

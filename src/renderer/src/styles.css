@@ -147,6 +147,14 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.sidebar-header .toolbar-segment {
+  flex-shrink: 0;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .sidebar-tree {

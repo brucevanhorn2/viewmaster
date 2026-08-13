@@ -10,7 +10,7 @@ import { addRecentFolder, getFolderMode, getRecentFolders, setFolderMode } from 
 import { createRecorder, type Recorder } from './history/recorder'
 import { historyPaths } from './history/paths'
 import { getObject, readVersions } from './history/store'
-import { listFolderTree, listGitTree, overlayStatus, toUnchangedFiles } from './files/browse'
+import { browseFiles, listFolderTree, toUnchangedFiles } from './files/browse'
 
 const RECOMPUTE_DEBOUNCE_MS = 300
 
@@ -51,11 +51,8 @@ async function computeRepoState(root: string, mode: SidebarMode): Promise<RepoSt
       const files = await collectChanges(repoRoot, baseline)
       return { kind: 'repo', root: repoRoot, baseline, mode, files }
     }
-    const [allPaths, changed] = await Promise.all([
-      listGitTree(repoRoot),
-      collectChanges(repoRoot, baseline)
-    ])
-    return { kind: 'repo', root: repoRoot, baseline, mode, files: overlayStatus(repoRoot, allPaths, changed) }
+    const files = await browseFiles(repoRoot, baseline)
+    return { kind: 'repo', root: repoRoot, baseline, mode, files }
   } catch (err) {
     return { kind: 'error', root: repoRoot, message: err instanceof Error ? err.message : String(err) }
   }
@@ -100,7 +97,7 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
       recomputeTimer = setTimeout(async () => {
         const currentMode = session?.mode ?? 'changed'
         const fresh = await computeRepoState(watchRoot, currentMode)
-        if (session?.root !== watchRoot) return // repo switched — drop stale update
+        if (session?.root !== watchRoot || session.mode !== currentMode) return // repo switched or mode toggled — drop stale update
         if (fresh.kind === 'repo') session.baseline = fresh.baseline
         // Resolve the window at send time — the window that opened the repo
         // may have been closed and replaced since.
@@ -111,7 +108,11 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
     session = {
       root: state.root,
       baseline: state.kind === 'repo' ? state.baseline : null,
-      mode: state.kind === 'repo' ? state.mode : 'changed',
+      // A folder session has no Changed/Browse toggle — it always shows the
+      // full tree — so `mode` is unused for 'folder' sessions; 'browse' is
+      // semantically accurate (as opposed to the never-read-for-anything
+      // 'changed' default), but only 'repo' sessions actually consult it.
+      mode: state.kind === 'repo' ? state.mode : 'browse',
       watcher,
       recorder
     }
@@ -146,7 +147,7 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     session.mode = mode
     setFolderMode(root, mode)
     const fresh = await computeRepoState(root, mode)
-    if (session?.root !== root) return null // repo switched mid-compute — drop stale update
+    if (session?.root !== root || session.mode !== mode) return null // repo switched or mode changed again mid-compute — drop stale update
     if (fresh.kind === 'repo') session.baseline = fresh.baseline
     return fresh
   })
