@@ -58,6 +58,11 @@ describe('listFolderTree', () => {
 
     expect(await listFolderTree(dir)).toEqual(['alpha.txt', 'mid/beta.txt', 'zebra.txt'])
   })
+
+  it('throws an error when the root directory does not exist', async () => {
+    const nonexistent = join(tmpdir(), 'nonexistent-folder-' + Math.random())
+    await expect(listFolderTree(nonexistent)).rejects.toThrow()
+  })
 })
 
 describe('toUnchangedFiles', () => {

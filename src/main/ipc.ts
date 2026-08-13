@@ -34,8 +34,12 @@ async function closeSession(): Promise<void> {
 async function computeRepoState(root: string): Promise<RepoState> {
   const inside = await runGit(root, ['rev-parse', '--is-inside-work-tree'])
   if (inside.code !== 0 || inside.stdout.trim() !== 'true') {
-    const paths = await listFolderTree(root)
-    return { kind: 'folder', root, files: toUnchangedFiles(root, paths) }
+    try {
+      const paths = await listFolderTree(root)
+      return { kind: 'folder', root, files: toUnchangedFiles(root, paths) }
+    } catch (err) {
+      return { kind: 'error', root, message: err instanceof Error ? err.message : String(err) }
+    }
   }
   const toplevel = await runGit(root, ['rev-parse', '--show-toplevel'])
   const repoRoot = toplevel.code === 0 ? toplevel.stdout.trim() : root
