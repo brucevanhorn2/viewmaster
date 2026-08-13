@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ChangedFile, FileStatus, RepoState } from '@shared/types'
+import type { ChangedFile, FileStatus, RepoState, SidebarMode } from '@shared/types'
 import { buildTree, type TreeNode } from '@shared/tree'
 import { fileIconUrl, folderIconUrl } from '../icons'
 
@@ -7,7 +7,8 @@ const STATUS_LETTER: Record<FileStatus, string> = {
   untracked: 'U',
   modified: 'M',
   staged: 'S',
-  committed: 'C'
+  committed: 'C',
+  unchanged: ''
 }
 
 interface ContextMenuState {
@@ -52,10 +53,12 @@ function FileRow({
     >
       <img className="file-icon" src={fileIconUrl(name)} alt="" />
       <span className="file-name">{name}</span>
-      <span className="status-badge">
-        {STATUS_LETTER[file.status]}
-        {file.secondary && <span className="status-secondary">·{STATUS_LETTER[file.secondary]}</span>}
-      </span>
+      {file.status !== 'unchanged' && (
+        <span className="status-badge">
+          {STATUS_LETTER[file.status]}
+          {file.secondary && <span className="status-secondary">·{STATUS_LETTER[file.secondary]}</span>}
+        </span>
+      )}
     </div>
   )
 }
@@ -140,11 +143,13 @@ function Children({
 export default function Sidebar({
   state,
   selected,
-  onSelect
+  onSelect,
+  onSetMode
 }: {
   state: RepoState
   selected: string | null
   onSelect: (file: ChangedFile) => void
+  onSetMode: (mode: SidebarMode) => void
 }): React.JSX.Element {
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
 
@@ -160,26 +165,15 @@ export default function Sidebar({
   }, [menu])
 
   const tree = useMemo(
-    () => (state.kind === 'repo' ? buildTree(state.files) : null),
+    () => (state.kind === 'repo' || state.kind === 'folder' ? buildTree(state.files) : null),
     [state]
   )
-
-  if (state.kind === 'not-git') {
-    return (
-      <div className="sidebar">
-        <div className="sidebar-message">
-          Not a git repository
-          <div className="sidebar-message-detail">{state.root}</div>
-        </div>
-      </div>
-    )
-  }
 
   if (state.kind === 'error') {
     return (
       <div className="sidebar">
         <div className="sidebar-message">
-          Git error
+          Couldn&apos;t open folder
           <div className="sidebar-message-detail">{state.message}</div>
         </div>
       </div>
@@ -192,14 +186,34 @@ export default function Sidebar({
     setMenu({ x: e.clientX, y: e.clientY, file })
   }
 
+  const emptyMessage =
+    state.kind === 'folder' || (state.kind === 'repo' && state.mode === 'browse')
+      ? 'No files to show'
+      : 'No changes in this branch'
+
   return (
     <div className="sidebar">
       <div className="sidebar-header" title={state.root}>
-        {baselineLabel(state)}
+        <span className="sidebar-header-label">
+          {state.kind === 'folder' ? state.root : baselineLabel(state)}
+        </span>
+        {state.kind === 'repo' && (
+          <span className="toolbar-segment">
+            {(['changed', 'browse'] as const).map((m) => (
+              <button
+                key={m}
+                className={`toolbar-button${state.mode === m ? ' active' : ''}`}
+                onClick={() => onSetMode(m)}
+              >
+                {m === 'changed' ? 'Changed' : 'Browse'}
+              </button>
+            ))}
+          </span>
+        )}
       </div>
       <div className="sidebar-tree">
         {tree && tree.dirs.length === 0 && tree.files.length === 0 ? (
-          <div className="sidebar-message">No changes in this branch</div>
+          <div className="sidebar-message">{emptyMessage}</div>
         ) : (
           tree && (
             <Children

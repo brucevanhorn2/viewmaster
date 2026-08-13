@@ -53,7 +53,7 @@ history/
   identical states never double-store. Text documents are small; a day of edits
   is kilobytes.
 - **Git repos only.** The feature anchors on baselines and commits; for
-  `not-git` folders it is simply inactive.
+  `'folder'` folders it is simply inactive.
 
 ## Capture pipeline (settle-based)
 

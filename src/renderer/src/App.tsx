@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
-import type { ChangedFile, HistoryVersion, RepoState } from '@shared/types'
+import type { ChangedFile, HistoryVersion, RepoState, SidebarMode } from '@shared/types'
 import Sidebar from './components/Sidebar'
 import ContentPane from './components/ContentPane'
 import HistoryPane from './components/HistoryPane'
@@ -11,6 +11,16 @@ import {
   type RevisionRef,
   type Selection
 } from './history/selection'
+
+/** Re-resolve the selected file's object against a fresh RepoState, keeping the same file selected. */
+function reconcileSelected(
+  state: RepoState,
+  current: ChangedFile | null
+): ChangedFile | null {
+  if (!current) return current
+  if (state.kind !== 'repo' && state.kind !== 'folder') return current
+  return state.files.find((f) => f.path === current.path) ?? current
+}
 
 function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Element {
   const [recents, setRecents] = useState<string[]>([])
@@ -61,6 +71,14 @@ export default function App(): React.JSX.Element {
     })
   }, [])
 
+  const setMode = useCallback((mode: SidebarMode): void => {
+    void window.viewmaster.setMode(mode).then((state) => {
+      if (!state) return
+      setRepo(state)
+      setSelected((current) => reconcileSelected(state, current))
+    })
+  }, [])
+
   useEffect(() => window.viewmaster.onMenuOpenFolder(openFolder), [openFolder])
 
   // Watcher-driven auto-refresh: update the change list in place and make
@@ -70,12 +88,7 @@ export default function App(): React.JSX.Element {
       window.viewmaster.onRepoChanged((state) => {
         setRepo(state)
         setRefreshKey((k) => k + 1)
-        if (state.kind === 'repo') {
-          setSelected((current) => {
-            if (!current) return current
-            return state.files.find((f) => f.path === current.path) ?? current
-          })
-        }
+        setSelected((current) => reconcileSelected(state, current))
       }),
     []
   )
@@ -129,7 +142,12 @@ export default function App(): React.JSX.Element {
         <Allotment.Pane minSize={180} preferredSize={280}>
           <Allotment vertical>
             <Allotment.Pane>
-              <Sidebar state={repo} selected={selected?.path ?? null} onSelect={setSelected} />
+              <Sidebar
+                state={repo}
+                selected={selected?.path ?? null}
+                onSelect={setSelected}
+                onSetMode={setMode}
+              />
             </Allotment.Pane>
             <Allotment.Pane preferredSize={220} minSize={80}>
               <HistoryPane

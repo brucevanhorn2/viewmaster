@@ -20,6 +20,10 @@ eyeball what changed on a branch. View Master does two things, and only ever
 - Left sidebar shows **only the files changed within the current branch** —
   committed, staged, or modified/untracked — collapsed to just the directories
   that contain changes.
+- **Changed / Browse toggle** — flip to Browse to see the full folder tree
+  (filtered by `.gitignore`), not just what changed. Files that are still
+  git-changed keep their status coloring. Opening a folder that isn't a git
+  repository always browses — there's nothing "changed" to show without git.
 - File-type icons and status coloring (untracked / modified / staged / committed).
 - Click a **markdown** file → rendered view, with a three-way toggle:
   **Rendered | Marks | Source**.

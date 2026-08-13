@@ -9,9 +9,9 @@ export interface TreeNode {
 }
 
 /**
- * Build a directory tree from the changed-file set. Because it is built
- * solely from changed files, it contains exactly the directories that hold
- * changes — the sidebar's collapsed, branch-changes-only view.
+ * Build a directory tree from a flat file list. Used both for the
+ * changed-files sidebar view (only directories with changes appear) and the
+ * full browse-mode tree (every non-ignored file and its ancestor dirs).
  */
 export function buildTree(files: ChangedFile[]): TreeNode {
   const root: TreeNode = { name: '', path: '', dirs: [], files: [] }

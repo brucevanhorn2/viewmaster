@@ -129,16 +129,32 @@ body {
 }
 
 .sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 8px 12px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--fg-dim);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-header-label {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.sidebar-header .toolbar-segment {
   flex-shrink: 0;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .sidebar-tree {
