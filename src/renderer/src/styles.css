@@ -129,16 +129,23 @@ body {
 }
 
 .sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 8px 12px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--fg-dim);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-header-label {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-shrink: 0;
 }
 
 .sidebar-tree {

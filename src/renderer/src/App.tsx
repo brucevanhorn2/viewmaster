@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
-import type { ChangedFile, HistoryVersion, RepoState } from '@shared/types'
+import type { ChangedFile, HistoryVersion, RepoState, SidebarMode } from '@shared/types'
 import Sidebar from './components/Sidebar'
 import ContentPane from './components/ContentPane'
 import HistoryPane from './components/HistoryPane'
@@ -58,6 +58,12 @@ export default function App(): React.JSX.Element {
     void window.viewmaster.openRepo(root).then((state) => {
       setRepo(state)
       setSelected(null)
+    })
+  }, [])
+
+  const setMode = useCallback((mode: SidebarMode): void => {
+    void window.viewmaster.setMode(mode).then((state) => {
+      if (state) setRepo(state)
     })
   }, [])
 
@@ -129,7 +135,12 @@ export default function App(): React.JSX.Element {
         <Allotment.Pane minSize={180} preferredSize={280}>
           <Allotment vertical>
             <Allotment.Pane>
-              <Sidebar state={repo} selected={selected?.path ?? null} onSelect={setSelected} />
+              <Sidebar
+                state={repo}
+                selected={selected?.path ?? null}
+                onSelect={setSelected}
+                onSetMode={setMode}
+              />
             </Allotment.Pane>
             <Allotment.Pane preferredSize={220} minSize={80}>
               <HistoryPane

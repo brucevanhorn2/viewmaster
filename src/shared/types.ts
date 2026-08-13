@@ -21,8 +21,10 @@ export type BaselineKind =
       branch?: string
     }
 
+export type SidebarMode = 'changed' | 'browse'
+
 export type RepoState =
-  | { kind: 'repo'; root: string; baseline: BaselineKind; files: ChangedFile[] }
+  | { kind: 'repo'; root: string; baseline: BaselineKind; mode: SidebarMode; files: ChangedFile[] }
   | { kind: 'folder'; root: string; files: ChangedFile[] }
   | { kind: 'error'; root: string; message: string }
 

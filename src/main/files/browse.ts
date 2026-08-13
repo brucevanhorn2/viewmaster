@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'fs/promises'
 import { join } from 'path'
 import ignore from 'ignore'
+import { runGit } from '../git/run'
 import type { ChangedFile } from '@shared/types'
 
 /**
@@ -44,4 +45,29 @@ export async function listFolderTree(root: string): Promise<string[]> {
 /** Wrap plain filesystem paths as ChangedFile entries with no git status. */
 export function toUnchangedFiles(root: string, paths: string[]): ChangedFile[] {
   return paths.map((path) => ({ path, absPath: join(root, path), status: 'unchanged' as const }))
+}
+
+/**
+ * Full non-ignored file listing for a git repo: tracked files plus
+ * untracked-but-not-ignored ones, exactly what `.gitignore` (nested
+ * included, via git itself) would allow through.
+ */
+export async function listGitTree(root: string): Promise<string[]> {
+  const res = await runGit(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard'])
+  if (res.code !== 0) throw new Error(`git ls-files failed: ${res.stderr.trim()}`)
+  return res.stdout
+    .split('\0')
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b))
+}
+
+/**
+ * Merge a full path listing with the changed-file set: changed paths keep
+ * their real status, everything else is 'unchanged'.
+ */
+export function overlayStatus(root: string, allPaths: string[], changed: ChangedFile[]): ChangedFile[] {
+  const changedByPath = new Map(changed.map((f) => [f.path, f]))
+  return allPaths
+    .map((path) => changedByPath.get(path) ?? { path, absPath: join(root, path), status: 'unchanged' as const })
+    .sort((a, b) => a.path.localeCompare(b.path))
 }

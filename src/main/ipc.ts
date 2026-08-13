@@ -1,22 +1,23 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import type { FSWatcher } from 'fs'
-import type { BaselineKind, FileContent, HistoryVersion, RepoState } from '@shared/types'
+import type { BaselineKind, FileContent, HistoryVersion, RepoState, SidebarMode } from '@shared/types'
 import { runGit } from './git/run'
 import { resolveBaseline } from './git/baseline'
 import { collectChanges } from './git/changes'
 import { readBaseFile, readCurrentFile } from './git/content'
 import { watchRepo } from './watcher'
-import { addRecentFolder, getRecentFolders } from './store'
+import { addRecentFolder, getFolderMode, getRecentFolders, setFolderMode } from './store'
 import { createRecorder, type Recorder } from './history/recorder'
 import { historyPaths } from './history/paths'
 import { getObject, readVersions } from './history/store'
-import { listFolderTree, toUnchangedFiles } from './files/browse'
+import { listFolderTree, listGitTree, overlayStatus, toUnchangedFiles } from './files/browse'
 
 const RECOMPUTE_DEBOUNCE_MS = 300
 
 interface Session {
   root: string
   baseline: BaselineKind | null
+  mode: SidebarMode
   watcher: FSWatcher
   recorder: Recorder | null
 }
@@ -31,7 +32,7 @@ async function closeSession(): Promise<void> {
   }
 }
 
-async function computeRepoState(root: string): Promise<RepoState> {
+async function computeRepoState(root: string, mode: SidebarMode): Promise<RepoState> {
   const inside = await runGit(root, ['rev-parse', '--is-inside-work-tree'])
   if (inside.code !== 0 || inside.stdout.trim() !== 'true') {
     try {
@@ -46,18 +47,37 @@ async function computeRepoState(root: string): Promise<RepoState> {
 
   try {
     const baseline = await resolveBaseline(repoRoot)
-    const files = await collectChanges(repoRoot, baseline)
-    return { kind: 'repo', root: repoRoot, baseline, files }
+    if (mode === 'changed') {
+      const files = await collectChanges(repoRoot, baseline)
+      return { kind: 'repo', root: repoRoot, baseline, mode, files }
+    }
+    const [allPaths, changed] = await Promise.all([
+      listGitTree(repoRoot),
+      collectChanges(repoRoot, baseline)
+    ])
+    return { kind: 'repo', root: repoRoot, baseline, mode, files: overlayStatus(repoRoot, allPaths, changed) }
   } catch (err) {
     return { kind: 'error', root: repoRoot, message: err instanceof Error ? err.message : String(err) }
   }
+}
+
+/**
+ * Resolve the key used for persisted per-folder mode: the git toplevel for a
+ * repo, the raw path otherwise. A second, cheap `rev-parse` call — kept
+ * separate from computeRepoState so mode can be looked up before the first
+ * real computation runs.
+ */
+async function resolveModeKey(root: string): Promise<string> {
+  const toplevel = await runGit(root, ['rev-parse', '--show-toplevel'])
+  return toplevel.code === 0 ? toplevel.stdout.trim() : root
 }
 
 type WindowGetter = () => BrowserWindow | null
 
 async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoState> {
   await closeSession()
-  const state = await computeRepoState(root)
+  const mode = getFolderMode(await resolveModeKey(root))
+  const state = await computeRepoState(root, mode)
 
   if (state.kind !== 'error') addRecentFolder(state.root)
 
@@ -78,7 +98,8 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
       recorder?.handleEvent(relPath)
       if (recomputeTimer) clearTimeout(recomputeTimer)
       recomputeTimer = setTimeout(async () => {
-        const fresh = await computeRepoState(watchRoot)
+        const currentMode = session?.mode ?? 'changed'
+        const fresh = await computeRepoState(watchRoot, currentMode)
         if (session?.root !== watchRoot) return // repo switched — drop stale update
         if (fresh.kind === 'repo') session.baseline = fresh.baseline
         // Resolve the window at send time — the window that opened the repo
@@ -90,6 +111,7 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
     session = {
       root: state.root,
       baseline: state.kind === 'repo' ? state.baseline : null,
+      mode: state.kind === 'repo' ? state.mode : 'changed',
       watcher,
       recorder
     }
@@ -115,7 +137,16 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
   })
 
   ipcMain.handle('repo:refresh', async (): Promise<RepoState | null> => {
-    return session ? computeRepoState(session.root) : null
+    return session ? computeRepoState(session.root, session.mode) : null
+  })
+
+  ipcMain.handle('mode:set', async (_e, mode: SidebarMode): Promise<RepoState | null> => {
+    if (!session) return null
+    session.mode = mode
+    setFolderMode(session.root, mode)
+    const fresh = await computeRepoState(session.root, mode)
+    if (fresh.kind === 'repo') session.baseline = fresh.baseline
+    return fresh
   })
 
   ipcMain.handle('file:read', (_e, absPath: string): Promise<FileContent> => readCurrentFile(absPath))

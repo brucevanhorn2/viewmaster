@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join, dirname } from 'path'
-import { listFolderTree, toUnchangedFiles } from './browse'
+import { listFolderTree, listGitTree, overlayStatus, toUnchangedFiles } from './browse'
+import { makeRepo, type TestRepo } from '../git/testRepo'
 
 let dir: string
 
@@ -70,6 +71,40 @@ describe('toUnchangedFiles', () => {
     expect(toUnchangedFiles('/vault', ['a.md', 'sub/b.md'])).toEqual([
       { path: 'a.md', absPath: join('/vault', 'a.md'), status: 'unchanged' },
       { path: 'sub/b.md', absPath: join('/vault', 'sub/b.md'), status: 'unchanged' }
+    ])
+  })
+})
+
+describe('listGitTree', () => {
+  let repo: TestRepo
+
+  beforeEach(async () => {
+    repo = await makeRepo()
+  })
+
+  afterEach(async () => {
+    await repo.cleanup()
+  })
+
+  it('lists tracked and untracked-non-ignored files, excludes ignored ones', async () => {
+    await repo.write('.gitignore', '*.log\n')
+    await repo.write('a.txt', 'a')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'init')
+    await repo.write('b.txt', 'b') // untracked
+    await repo.write('debug.log', 'd') // untracked + ignored
+
+    expect(await listGitTree(repo.root)).toEqual(['.gitignore', 'a.txt', 'b.txt'])
+  })
+})
+
+describe('overlayStatus', () => {
+  it('keeps the real status for changed paths and marks the rest unchanged', () => {
+    const changed = [{ path: 'a.txt', absPath: '/r/a.txt', status: 'modified' as const }]
+
+    expect(overlayStatus('/r', ['b.txt', 'a.txt'], changed)).toEqual([
+      { path: 'a.txt', absPath: '/r/a.txt', status: 'modified' },
+      { path: 'b.txt', absPath: '/r/b.txt', status: 'unchanged' }
     ])
   })
 })

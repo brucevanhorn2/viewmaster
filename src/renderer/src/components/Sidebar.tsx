@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ChangedFile, FileStatus, RepoState } from '@shared/types'
+import type { ChangedFile, FileStatus, RepoState, SidebarMode } from '@shared/types'
 import { buildTree, type TreeNode } from '@shared/tree'
 import { fileIconUrl, folderIconUrl } from '../icons'
 
@@ -143,11 +143,13 @@ function Children({
 export default function Sidebar({
   state,
   selected,
-  onSelect
+  onSelect,
+  onSetMode
 }: {
   state: RepoState
   selected: string | null
   onSelect: (file: ChangedFile) => void
+  onSetMode: (mode: SidebarMode) => void
 }): React.JSX.Element {
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
 
@@ -189,7 +191,22 @@ export default function Sidebar({
   return (
     <div className="sidebar">
       <div className="sidebar-header" title={state.root}>
-        {state.kind === 'folder' ? state.root : baselineLabel(state)}
+        <span className="sidebar-header-label">
+          {state.kind === 'folder' ? state.root : baselineLabel(state)}
+        </span>
+        {state.kind === 'repo' && (
+          <span className="toolbar-segment">
+            {(['changed', 'browse'] as const).map((m) => (
+              <button
+                key={m}
+                className={`toolbar-button${state.mode === m ? ' active' : ''}`}
+                onClick={() => onSetMode(m)}
+              >
+                {m === 'changed' ? 'Changed' : 'Browse'}
+              </button>
+            ))}
+          </span>
+        )}
       </div>
       <div className="sidebar-tree">
         {tree && tree.dirs.length === 0 && tree.files.length === 0 ? (
