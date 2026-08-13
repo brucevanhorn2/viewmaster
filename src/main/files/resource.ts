@@ -29,16 +29,17 @@ function isInsideRoot(absPath: string, workspaceRoot: string): boolean {
 }
 
 /**
- * Reads a file for embedding in a rendered HTML preview: base64 content plus
- * an extension-inferred MIME type. Returns null for anything outside
- * `workspaceRoot`, missing, oversized, or unreadable — callers treat null as
- * "leave this reference unresolved," not as an error to surface.
+ * Resolves `absPath` and `workspaceRoot` to their real (symlink-following)
+ * paths and returns the real path of `absPath` when it's inside the real
+ * workspace root — null otherwise (including when either path can't be
+ * resolved, e.g. missing files or broken symlinks). Shared containment check
+ * for anything that hands a renderer-supplied path to a main-process API;
+ * callers treat null as "refuse silently," not as an error to surface.
  */
-export async function readResource(
+export async function resolveWithinRoot(
   absPath: string,
   workspaceRoot: string
-): Promise<{ base64: string; mime: string } | null> {
-  // Resolve to real paths (following symlinks) to prevent symlink escape attacks
+): Promise<string | null> {
   let realAbsPath: string
   let realRoot: string
   try {
@@ -49,8 +50,21 @@ export async function readResource(
     return null
   }
 
-  // Check that the real path is inside the real workspace root
-  if (!isInsideRoot(realAbsPath, realRoot)) return null
+  return isInsideRoot(realAbsPath, realRoot) ? realAbsPath : null
+}
+
+/**
+ * Reads a file for embedding in a rendered HTML preview: base64 content plus
+ * an extension-inferred MIME type. Returns null for anything outside
+ * `workspaceRoot`, missing, oversized, or unreadable — callers treat null as
+ * "leave this reference unresolved," not as an error to surface.
+ */
+export async function readResource(
+  absPath: string,
+  workspaceRoot: string
+): Promise<{ base64: string; mime: string } | null> {
+  const realAbsPath = await resolveWithinRoot(absPath, workspaceRoot)
+  if (!realAbsPath) return null
 
   let size: number
   try {

@@ -92,6 +92,15 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  // Hard boundary against previewed content (e.g. a <form> in a rendered
+  // HTML file) navigating the app window itself away from its own loaded
+  // URL — that would otherwise inherit the full preload IPC bridge. Holds
+  // even if the sanitizer allowlist ever regresses to permit some other
+  // navigation vector.
+  win.webContents.on('will-navigate', (event, url) => {
+    if (url !== win.webContents.getURL()) event.preventDefault()
+  })
+
   // Dev/testing hook: auto-open a folder on launch.
   const autoOpen = process.env['VIEWMASTER_OPEN']
   if (autoOpen) {

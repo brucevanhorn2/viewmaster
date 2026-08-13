@@ -11,7 +11,7 @@ import { createRecorder, type Recorder } from './history/recorder'
 import { historyPaths } from './history/paths'
 import { getObject, readVersions } from './history/store'
 import { browseFiles, listFolderTree, toUnchangedFiles } from './files/browse'
-import { readResource } from './files/resource'
+import { readResource, resolveWithinRoot } from './files/resource'
 
 const RECOMPUTE_DEBOUNCE_MS = 300
 
@@ -190,8 +190,11 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)
   })
 
-  ipcMain.handle('app:openInBrowser', (_e, absPath: string): void => {
-    void shell.openPath(absPath)
+  ipcMain.handle('app:openInBrowser', async (_e, absPath: string): Promise<void> => {
+    if (!session) return
+    const real = await resolveWithinRoot(absPath, session.root)
+    if (!real) return
+    void shell.openPath(real)
   })
 
   ipcMain.handle('history:list', async (_e, relPath: string): Promise<HistoryVersion[]> => {

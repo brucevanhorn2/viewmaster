@@ -3,7 +3,7 @@ import { dirnamePath, joinPath } from './paths'
 
 export type ResourceReader = (absPath: string) => Promise<{ base64: string; mime: string } | null>
 
-const FORBIDDEN_TAGS = ['script', 'iframe', 'object', 'embed', 'frame', 'frameset', 'applet']
+const FORBIDDEN_TAGS = ['script', 'iframe', 'object', 'embed', 'frame', 'frameset', 'applet', 'form']
 
 /**
  * Sanitizes a full HTML document, stripping every script-execution vector.

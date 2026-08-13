@@ -40,6 +40,17 @@ describe('sanitizeHtmlDocument', () => {
     expect(out).toContain('style="color:blue"')
   })
 
+  it('strips form tags and their action attribute, keeping inert children', () => {
+    const out = sanitizeHtmlDocument(
+      '<html><body><form action="https://x.example/steal" method="post">' +
+        '<button type="submit">Go</button></form></body></html>'
+    )
+    expect(out).not.toContain('<form')
+    expect(out).not.toContain('action=')
+    expect(out).not.toContain('x.example')
+    expect(out).toContain('<button type="submit">Go</button>')
+  })
+
   it('keeps map/area for image-map diagrams', () => {
     const out = sanitizeHtmlDocument(
       '<html><body><map name="m"><area shape="rect" coords="0,0,10,10" href="t.html"></map>' +
