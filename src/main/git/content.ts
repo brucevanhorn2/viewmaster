@@ -1,11 +1,21 @@
 import { readFile, stat } from 'fs/promises'
+import { extname } from 'path'
 import type { FileContent } from '@shared/types'
 import { runGit } from './run'
 
 const MAX_SIZE = 2 * 1024 * 1024
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024
 const BINARY_SNIFF_BYTES = 8192
 
-/** Read a file from disk, classifying binary / oversized / missing content. */
+const RASTER_IMAGE_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp'
+}
+
+/** Read a file from disk, classifying image / binary / oversized / missing content. */
 export async function readCurrentFile(absPath: string): Promise<FileContent> {
   let size: number
   try {
@@ -14,6 +24,17 @@ export async function readCurrentFile(absPath: string): Promise<FileContent> {
     size = info.size
   } catch {
     return { kind: 'missing' }
+  }
+
+  const rasterMime = RASTER_IMAGE_MIME[extname(absPath).toLowerCase()]
+  if (rasterMime) {
+    if (size > MAX_IMAGE_SIZE) return { kind: 'too-large', size }
+    try {
+      const buffer = await readFile(absPath)
+      return { kind: 'image', mime: rasterMime, base64: buffer.toString('base64') }
+    } catch {
+      return { kind: 'missing' }
+    }
   }
 
   if (size > MAX_SIZE) return { kind: 'too-large', size }

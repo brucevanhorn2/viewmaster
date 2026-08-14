@@ -27,6 +27,69 @@ describe('readCurrentFile', () => {
     expect(await readCurrentFile(join(repo.root, 'blob.bin'))).toEqual({ kind: 'binary' })
   })
 
+  it('classifies a raster image by extension, base64-encoded', async () => {
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a])
+    await repo.write('photo.png', bytes)
+    expect(await readCurrentFile(join(repo.root, 'photo.png'))).toEqual({
+      kind: 'image',
+      mime: 'image/png',
+      base64: bytes.toString('base64')
+    })
+  })
+
+  it('infers the correct MIME type per raster extension', async () => {
+    await repo.write('a.jpg', Buffer.from([1, 2, 3]))
+    await repo.write('b.jpeg', Buffer.from([1, 2, 3]))
+    await repo.write('c.gif', Buffer.from([1, 2, 3]))
+    await repo.write('d.webp', Buffer.from([1, 2, 3]))
+
+    expect(await readCurrentFile(join(repo.root, 'a.jpg'))).toMatchObject({
+      kind: 'image',
+      mime: 'image/jpeg'
+    })
+    expect(await readCurrentFile(join(repo.root, 'b.jpeg'))).toMatchObject({
+      kind: 'image',
+      mime: 'image/jpeg'
+    })
+    expect(await readCurrentFile(join(repo.root, 'c.gif'))).toMatchObject({
+      kind: 'image',
+      mime: 'image/gif'
+    })
+    expect(await readCurrentFile(join(repo.root, 'd.webp'))).toMatchObject({
+      kind: 'image',
+      mime: 'image/webp'
+    })
+  })
+
+  it('applies the larger 10MB image cap instead of the 2MB text/binary cap', async () => {
+    // Over the 2MB text cap, under the 10MB image cap.
+    const big = Buffer.alloc(3 * 1024 * 1024, 0x61)
+    await repo.write('big.png', big)
+    expect(await readCurrentFile(join(repo.root, 'big.png'))).toEqual({
+      kind: 'image',
+      mime: 'image/png',
+      base64: big.toString('base64')
+    })
+  })
+
+  it('rejects a raster image over the 10MB image size cap', async () => {
+    const big = Buffer.alloc(11 * 1024 * 1024, 0x61)
+    await repo.write('huge.png', big)
+    expect(await readCurrentFile(join(repo.root, 'huge.png'))).toEqual({
+      kind: 'too-large',
+      size: big.length
+    })
+  })
+
+  it('still classifies SVG as text, not image', async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="1"/></svg>'
+    await repo.write('icon.svg', svg)
+    expect(await readCurrentFile(join(repo.root, 'icon.svg'))).toEqual({
+      kind: 'text',
+      content: svg
+    })
+  })
+
   it('rejects files over the size cap', async () => {
     const big = Buffer.alloc(3 * 1024 * 1024, 0x61)
     await repo.write('big.txt', big)

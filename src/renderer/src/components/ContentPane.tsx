@@ -107,6 +107,8 @@ export default function ContentPane({
     )
   } else if (content.kind === 'missing') {
     body = <Placeholder title="File not found" detail={file.absPath} />
+  } else if (content.kind === 'image') {
+    body = <Placeholder title="Image" detail={content.mime} />
   } else if (mode === 'diff') {
     body =
       baseContent === null || compareContent === null ? (
