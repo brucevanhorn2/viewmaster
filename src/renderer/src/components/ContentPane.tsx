@@ -5,6 +5,7 @@ import CodeView from './CodeView'
 import DiffView from './DiffView'
 import MarkdownView from './MarkdownView'
 import Placeholder from './Placeholder'
+import PdfView from './PdfView'
 
 type Mode = 'view' | 'marks' | 'diff'
 
@@ -108,7 +109,7 @@ export default function ContentPane({
   } else if (content.kind === 'missing') {
     body = <Placeholder title="File not found" detail={file.absPath} />
   } else if (content.kind === 'pdf') {
-    body = <Placeholder title="PDF" detail="PDF rendering not yet implemented" />
+    body = <PdfView base64={content.base64} />
   } else if (mode === 'diff') {
     body =
       baseContent === null || compareContent === null ? (
