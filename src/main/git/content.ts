@@ -15,6 +15,11 @@ const RASTER_IMAGE_MIME: Record<string, string> = {
   '.webp': 'image/webp'
 }
 
+/** True when a path's extension is a recognized raster image type. */
+export function isRasterImagePath(path: string): boolean {
+  return extname(path).toLowerCase() in RASTER_IMAGE_MIME
+}
+
 /** Read a file from disk, classifying image / binary / oversized / missing content. */
 export async function readCurrentFile(absPath: string): Promise<FileContent> {
   let size: number

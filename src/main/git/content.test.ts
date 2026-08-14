@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { join } from 'path'
-import { readCurrentFile, readBaseFile } from './content'
+import { readCurrentFile, readBaseFile, isRasterImagePath } from './content'
 import { makeRepo, type TestRepo } from './testRepo'
 
 let repo: TestRepo
@@ -101,6 +101,24 @@ describe('readCurrentFile', () => {
 
   it('reports missing files', async () => {
     expect(await readCurrentFile(join(repo.root, 'nope.txt'))).toEqual({ kind: 'missing' })
+  })
+})
+
+describe('isRasterImagePath', () => {
+  it('is true for raster extensions, case-insensitively', () => {
+    expect(isRasterImagePath('photo.png')).toBe(true)
+    expect(isRasterImagePath('photo.PNG')).toBe(true)
+    expect(isRasterImagePath('a.jpg')).toBe(true)
+    expect(isRasterImagePath('a.JPG')).toBe(true)
+    expect(isRasterImagePath('a.jpeg')).toBe(true)
+    expect(isRasterImagePath('a.gif')).toBe(true)
+    expect(isRasterImagePath('a.webp')).toBe(true)
+  })
+
+  it('is false for non-raster extensions and no extension', () => {
+    expect(isRasterImagePath('icon.svg')).toBe(false)
+    expect(isRasterImagePath('notes.txt')).toBe(false)
+    expect(isRasterImagePath('Makefile')).toBe(false)
   })
 })
 
