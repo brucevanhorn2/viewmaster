@@ -1,12 +1,23 @@
+// src/renderer/src/components/MarkdownView.tsx
 import { useEffect, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 import { renderMarkdown, sanitizeHtml } from '../markdown/render'
 import { composeMarks } from '../markdown/marksDiff'
+import { classifyLinkHref } from '../markdown/links'
 
 mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' })
 
 const escape = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+/** Scrolls `id`'s element into view inside `container`, if it exists. Returns whether it was found. */
+function scrollToId(container: HTMLElement | null, id: string): boolean {
+  if (!container) return false
+  const target = container.querySelector(`#${CSS.escape(id)}`)
+  if (!target) return false
+  target.scrollIntoView({ behavior: 'smooth' })
+  return true
+}
 
 /**
  * Rendered markdown. When `baseContent` is a string (possibly ''), renders
@@ -15,10 +26,20 @@ const escape = (s: string): string =>
  */
 export default function MarkdownView({
   content,
-  baseContent = null
+  baseContent = null,
+  absPath,
+  workspaceRoot,
+  onNavigate,
+  scrollToAnchor = null,
+  onAnchorConsumed
 }: {
   content: string
   baseContent?: string | null
+  absPath: string
+  workspaceRoot: string
+  onNavigate: (absPath: string, anchor?: string) => void
+  scrollToAnchor?: string | null
+  onAnchorConsumed: () => void
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [html, setHtml] = useState('')
@@ -76,13 +97,26 @@ export default function MarkdownView({
     })
   }, [html])
 
-  // All hyperlinks open in the default browser; no in-app navigation.
+  // Scroll to a heading requested by a cross-document navigation (set by
+  // App.tsx's onNavigateToFile) once this document's content has rendered.
+  useEffect(() => {
+    if (!scrollToAnchor) return
+    if (scrollToId(ref.current, scrollToAnchor)) onAnchorConsumed()
+  }, [scrollToAnchor, html])
+
   const onClick = (e: React.MouseEvent): void => {
     const anchor = (e.target as HTMLElement).closest('a')
     if (!anchor) return
     e.preventDefault()
     const href = anchor.getAttribute('href') ?? ''
-    if (/^https?:\/\//.test(href)) window.viewmaster.openExternal(href)
+    const classification = classifyLinkHref(href, absPath, workspaceRoot)
+    if (classification.kind === 'external') {
+      window.viewmaster.openExternal(classification.url)
+    } else if (classification.kind === 'anchor') {
+      scrollToId(ref.current, classification.id)
+    } else if (classification.kind === 'navigate') {
+      onNavigate(classification.absPath, classification.anchor)
+    }
   }
 
   return (
