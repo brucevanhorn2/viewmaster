@@ -47,22 +47,27 @@ export default function PdfView({ base64 }: { base64: string }): React.JSX.Eleme
     let stale = false
 
     const renderPage = async (): Promise<void> => {
-      const page = await pdfDoc.getPage(pageNumber)
-      if (stale) return
-      const unscaled = page.getViewport({ scale: 1 })
-      const scale = container.clientWidth / unscaled.width
-      const viewport = page.getViewport({ scale })
-      canvas.width = viewport.width
-      canvas.height = viewport.height
-      const canvasContext = canvas.getContext('2d')
-      if (!canvasContext) return
-      renderTaskRef.current?.cancel()
-      const task = page.render({ canvasContext, canvas, viewport })
-      renderTaskRef.current = task
       try {
-        await task.promise
+        const page = await pdfDoc.getPage(pageNumber)
+        if (stale) return
+        const unscaled = page.getViewport({ scale: 1 })
+        const scale = container.clientWidth / unscaled.width
+        const viewport = page.getViewport({ scale })
+        canvas.width = viewport.width
+        canvas.height = viewport.height
+        const canvasContext = canvas.getContext('2d')
+        if (!canvasContext) return
+        renderTaskRef.current?.cancel()
+        const task = page.render({ canvasContext, canvas, viewport })
+        renderTaskRef.current = task
+        try {
+          await task.promise
+        } catch {
+          // Cancelled by a subsequent render (page change/resize) — expected.
+        }
       } catch {
-        // Cancelled by a subsequent render (page change/resize) — expected.
+        // Only treat as a failure if we're not stale (i.e., this is a genuine getPage/render failure).
+        if (!stale) setFailed(true)
       }
     }
 
