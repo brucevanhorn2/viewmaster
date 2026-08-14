@@ -8,6 +8,11 @@ handled)
 flagged as a follow-up (non-goal) in both `2026-08-12-rendered-html-view-design.md`
 and `2026-08-13-image-view-design.md`. Resolves issue #4.
 
+> **Note:** references to the image-view feature below (`RASTER_IMAGE_MIME`,
+> `isRasterImagePath`, the recorder's raster-image skip) describe an
+> unmerged sibling branch (`worktree-issue-3-support-for-images`), not code
+> present on this branch.
+
 ## Purpose
 
 Today a `.pdf` file has no extension in `RASTER_IMAGE_MIME` and no NUL byte
