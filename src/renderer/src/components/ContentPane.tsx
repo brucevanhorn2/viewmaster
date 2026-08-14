@@ -107,6 +107,8 @@ export default function ContentPane({
     )
   } else if (content.kind === 'missing') {
     body = <Placeholder title="File not found" detail={file.absPath} />
+  } else if (content.kind === 'pdf') {
+    body = <Placeholder title="PDF" detail="PDF rendering not yet implemented" />
   } else if (mode === 'diff') {
     body =
       baseContent === null || compareContent === null ? (

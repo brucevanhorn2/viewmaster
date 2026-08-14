@@ -1,11 +1,20 @@
 import { readFile, stat } from 'fs/promises'
+import { extname } from 'path'
 import type { FileContent } from '@shared/types'
 import { runGit } from './run'
 
 const MAX_SIZE = 2 * 1024 * 1024
+const MAX_PDF_SIZE = 25 * 1024 * 1024
 const BINARY_SNIFF_BYTES = 8192
 
-/** Read a file from disk, classifying binary / oversized / missing content. */
+const PDF_EXTENSION = '.pdf'
+
+/** True when a path's extension is `.pdf` (case-insensitive). */
+export function isPdfPath(path: string): boolean {
+  return extname(path).toLowerCase() === PDF_EXTENSION
+}
+
+/** Read a file from disk, classifying PDF / binary / oversized / missing content. */
 export async function readCurrentFile(absPath: string): Promise<FileContent> {
   let size: number
   try {
@@ -14,6 +23,16 @@ export async function readCurrentFile(absPath: string): Promise<FileContent> {
     size = info.size
   } catch {
     return { kind: 'missing' }
+  }
+
+  if (isPdfPath(absPath)) {
+    if (size > MAX_PDF_SIZE) return { kind: 'too-large', size }
+    try {
+      const buffer = await readFile(absPath)
+      return { kind: 'pdf', base64: buffer.toString('base64') }
+    } catch {
+      return { kind: 'missing' }
+    }
   }
 
   if (size > MAX_SIZE) return { kind: 'too-large', size }

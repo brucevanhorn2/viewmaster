@@ -30,6 +30,7 @@ export type RepoState =
 
 export type FileContent =
   | { kind: 'text'; content: string }
+  | { kind: 'pdf'; base64: string }
   | { kind: 'binary' }
   | { kind: 'too-large'; size: number }
   | { kind: 'missing' }
