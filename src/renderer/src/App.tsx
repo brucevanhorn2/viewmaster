@@ -128,6 +128,34 @@ export default function App(): React.JSX.Element {
     [versions]
   )
 
+  const [pendingAnchor, setPendingAnchor] = useState<{ absPath: string; anchor: string } | null>(
+    null
+  )
+
+  const onNavigateToFile = useCallback(
+    (absPath: string, anchor?: string): void => {
+      if (!repo || (repo.kind !== 'repo' && repo.kind !== 'folder')) return
+      const existing = repo.files.find((f) => f.absPath === absPath)
+      if (existing) {
+        setSelected(existing)
+      } else {
+        // Linked file has no git-changed entry in the current listing (e.g.
+        // Changed mode with an untouched target) — synthesize the same shape
+        // Browse Mode's overlayStatus already gives unchanged files.
+        const rel = absPath.startsWith(repo.root)
+          ? absPath.slice(repo.root.length).replace(/^\/+/, '')
+          : absPath
+        setSelected({ path: rel, absPath, status: 'unchanged' })
+      }
+      setPendingAnchor(anchor ? { absPath, anchor } : null)
+    },
+    [repo]
+  )
+
+  const onAnchorConsumed = useCallback((): void => {
+    setPendingAnchor(null)
+  }, [])
+
   if (!repo) {
     return (
       <div className="app">
@@ -165,6 +193,14 @@ export default function App(): React.JSX.Element {
             refreshKey={refreshKey}
             selection={selection}
             versions={versions}
+            workspaceRoot={repo?.root ?? ''}
+            onNavigate={onNavigateToFile}
+            scrollToAnchor={
+              pendingAnchor && selected && pendingAnchor.absPath === selected.absPath
+                ? pendingAnchor.anchor
+                : null
+            }
+            onAnchorConsumed={onAnchorConsumed}
           />
         </Allotment.Pane>
       </Allotment>
