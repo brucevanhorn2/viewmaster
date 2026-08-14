@@ -64,4 +64,36 @@ describe('classifyLinkHref', () => {
   it('no-ops an empty href', () => {
     expect(classifyLinkHref('', MD_PATH, ROOT)).toEqual({ kind: 'noop' })
   })
+
+  it('percent-decodes a space in the path before resolving', () => {
+    expect(classifyLinkHref('My%20Notes.md', MD_PATH, ROOT)).toEqual({
+      kind: 'navigate',
+      absPath: '/w/docs/My Notes.md'
+    })
+  })
+
+  it('percent-decodes non-ASCII characters in both path and fragment', () => {
+    expect(classifyLinkHref('%C3%BCber.md#%C3%9Cnder', MD_PATH, ROOT)).toEqual({
+      kind: 'navigate',
+      absPath: '/w/docs/über.md',
+      anchor: 'Ünder'
+    })
+  })
+
+  it('percent-decodes a bare fragment anchor', () => {
+    expect(classifyLinkHref('#%C3%9Cnder', MD_PATH, ROOT)).toEqual({
+      kind: 'anchor',
+      id: 'Ünder'
+    })
+  })
+
+  it('no-ops a malformed percent-sequence instead of throwing', () => {
+    expect(classifyLinkHref('bad%zzpath.md', MD_PATH, ROOT)).toEqual({ kind: 'noop' })
+  })
+
+  it('still blocks a percent-encoded traversal that escapes the workspace root', () => {
+    expect(
+      classifyLinkHref('%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd', MD_PATH, ROOT)
+    ).toEqual({ kind: 'noop' })
+  })
 })
