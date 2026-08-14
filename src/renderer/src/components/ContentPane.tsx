@@ -5,14 +5,22 @@ import CodeView from './CodeView'
 import DiffView from './DiffView'
 import MarkdownView from './MarkdownView'
 import Placeholder from './Placeholder'
+import ImageView from './ImageView'
+import { rasterDataUrl, svgDataUrl } from '../image/dataUrl'
 
-type Mode = 'view' | 'marks' | 'diff'
+type Mode = 'view' | 'marks' | 'code' | 'diff'
 
 const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx']
 
 function isMarkdown(path: string): boolean {
   const lower = path.toLowerCase()
   return MARKDOWN_EXTENSIONS.some((ext) => lower.endsWith(ext))
+}
+
+const SVG_EXTENSION = '.svg'
+
+function isSvg(path: string): boolean {
+  return path.toLowerCase().endsWith(SVG_EXTENSION)
 }
 
 export default function ContentPane({
@@ -96,6 +104,8 @@ export default function ContentPane({
   let body: React.JSX.Element
   if (!content) {
     body = <Placeholder title="Loading…" />
+  } else if (content.kind === 'image') {
+    body = <ImageView src={rasterDataUrl(content.mime, content.base64)} />
   } else if (content.kind === 'binary') {
     body = <Placeholder title="Binary file" detail="Not displayed" />
   } else if (content.kind === 'too-large') {
@@ -107,8 +117,10 @@ export default function ContentPane({
     )
   } else if (content.kind === 'missing') {
     body = <Placeholder title="File not found" detail={file.absPath} />
-  } else if (content.kind === 'image') {
-    body = <Placeholder title="Image" detail={content.mime} />
+  } else if (isSvg(file.path) && mode === 'code') {
+    body = <CodeView fileName={fileName} content={content.content} />
+  } else if (isSvg(file.path)) {
+    body = <ImageView src={svgDataUrl(content.content)} />
   } else if (mode === 'diff') {
     body =
       baseContent === null || compareContent === null ? (
@@ -143,12 +155,24 @@ export default function ContentPane({
           {file.path}
         </span>
         <span className="toolbar-actions">
-          {showToolbarToggles && mode === 'diff' && (
+          {showToolbarToggles && mode === 'diff' && !isSvg(file.path) && (
             <button className="toolbar-button" onClick={() => setSideBySide(!sideBySide)}>
               {sideBySide ? 'Inline' : 'Side by side'}
             </button>
           )}
-          {showToolbarToggles && isMarkdown(file.path) ? (
+          {showToolbarToggles && isSvg(file.path) ? (
+            <span className="toolbar-segment">
+              {(['view', 'code'] as const).map((m) => (
+                <button
+                  key={m}
+                  className={`toolbar-button${mode === m ? ' active' : ''}`}
+                  onClick={() => setMode(m)}
+                >
+                  {m === 'view' ? 'Rendered' : 'Code'}
+                </button>
+              ))}
+            </span>
+          ) : showToolbarToggles && isMarkdown(file.path) ? (
             <span className="toolbar-segment">
               {(['view', 'marks', 'diff'] as const).map((m) => (
                 <button
