@@ -28,12 +28,20 @@ export default function ContentPane({
   file,
   refreshKey,
   selection,
-  versions
+  versions,
+  workspaceRoot,
+  onNavigate,
+  scrollToAnchor,
+  onAnchorConsumed
 }: {
   file: ChangedFile | null
   refreshKey: number
   selection: Selection
   versions: HistoryVersion[]
+  workspaceRoot: string
+  onNavigate: (absPath: string, anchor?: string) => void
+  scrollToAnchor: string | null
+  onAnchorConsumed: () => void
 }): React.JSX.Element {
   const [mode, setMode] = useState<Mode>('view')
   const [sideBySide, setSideBySide] = useState(true)
@@ -141,10 +149,27 @@ export default function ContentPane({
       baseContent === null || compareContent === null ? (
         <Placeholder title="Loading marks…" />
       ) : (
-        <MarkdownView content={compareContent} baseContent={baseContent} />
+        <MarkdownView
+          content={compareContent}
+          baseContent={baseContent}
+          absPath={file.absPath}
+          workspaceRoot={workspaceRoot}
+          onNavigate={onNavigate}
+          scrollToAnchor={scrollToAnchor}
+          onAnchorConsumed={onAnchorConsumed}
+        />
       )
   } else if (isMarkdown(file.path)) {
-    body = <MarkdownView content={content.content} />
+    body = (
+      <MarkdownView
+        content={content.content}
+        absPath={file.absPath}
+        workspaceRoot={workspaceRoot}
+        onNavigate={onNavigate}
+        scrollToAnchor={scrollToAnchor}
+        onAnchorConsumed={onAnchorConsumed}
+      />
+    )
   } else {
     body = <CodeView fileName={fileName} content={content.content} />
   }
