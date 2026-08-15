@@ -72,18 +72,33 @@ describe('classifyLinkHref', () => {
     })
   })
 
-  it('percent-decodes non-ASCII characters in both path and fragment', () => {
+  it('percent-decodes non-ASCII characters in both path and fragment, lowercasing the anchor', () => {
     expect(classifyLinkHref('%C3%BCber.md#%C3%9Cnder', MD_PATH, ROOT)).toEqual({
       kind: 'navigate',
       absPath: '/w/docs/über.md',
-      anchor: 'Ünder'
+      anchor: 'ünder'
     })
   })
 
-  it('percent-decodes a bare fragment anchor', () => {
+  it('percent-decodes a bare fragment anchor, lowercasing it', () => {
     expect(classifyLinkHref('#%C3%9Cnder', MD_PATH, ROOT)).toEqual({
       kind: 'anchor',
-      id: 'Ünder'
+      id: 'ünder'
+    })
+  })
+
+  it('lowercases a mixed-case bare anchor to match slugify\'s lowercase heading ids', () => {
+    expect(classifyLinkHref('#Getting-Started', MD_PATH, ROOT)).toEqual({
+      kind: 'anchor',
+      id: 'getting-started'
+    })
+  })
+
+  it('lowercases a mixed-case anchor on a navigate-with-anchor link', () => {
+    expect(classifyLinkHref('other.md#Getting-Started', MD_PATH, ROOT)).toEqual({
+      kind: 'navigate',
+      absPath: '/w/docs/other.md',
+      anchor: 'getting-started'
     })
   })
 

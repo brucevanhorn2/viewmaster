@@ -32,6 +32,12 @@ function tryDecode(component: string): string | null {
  * the path and fragment portions are decoded before resolution/containment
  * checks -- decoding after would let a percent-encoded traversal sequence
  * slip past isInsideRoot before it's decoded into the "../.." it represents.
+ *
+ * Anchor ids are lowercased before being returned: slugify() (../markdown/
+ * slug.ts) always produces lowercase heading ids, but a hand-authored link
+ * fragment often copies the heading's original mixed-case text (e.g.
+ * "[jump](#Getting-Started)" for a "## Getting Started" heading) -- without
+ * normalizing here, that case-preserved lookup would never match.
  */
 export function classifyLinkHref(
   href: string,
@@ -42,7 +48,7 @@ export function classifyLinkHref(
   if (href === '') return { kind: 'noop' }
   if (href.startsWith('#')) {
     const decoded = tryDecode(href.slice(1))
-    return decoded === null ? { kind: 'noop' } : { kind: 'anchor', id: decoded }
+    return decoded === null ? { kind: 'noop' } : { kind: 'anchor', id: decoded.toLowerCase() }
   }
   // Any other URI scheme (mailto:, tel:, javascript:, data:, ...) is inert here.
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)) return { kind: 'noop' }
@@ -56,7 +62,7 @@ export function classifyLinkHref(
   if (pathPart === null) return { kind: 'noop' }
   const decodedAnchor = rawAnchor === undefined ? undefined : tryDecode(rawAnchor)
   if (decodedAnchor === null) return { kind: 'noop' }
-  const anchor = decodedAnchor
+  const anchor = decodedAnchor?.toLowerCase()
 
   const base = pathPart.startsWith('/') ? workspaceRoot : dirnamePath(mdAbsPath)
   const rel = pathPart.startsWith('/') ? pathPart.slice(1) : pathPart

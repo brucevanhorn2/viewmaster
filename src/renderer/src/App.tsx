@@ -156,6 +156,17 @@ export default function App(): React.JSX.Element {
     setPendingAnchor(null)
   }, [])
 
+  // Any selection that doesn't go through onNavigateToFile (e.g. picking a
+  // file directly in the sidebar) clears a pending anchor rather than
+  // leaving it to potentially fire later -- otherwise a stale anchor from an
+  // earlier broken/typo'd link (never consumed because the heading didn't
+  // exist yet) could unexpectedly scroll the pane if the user later
+  // reselects that same file and the heading has since been added.
+  const onSidebarSelect = useCallback((file: ChangedFile | null): void => {
+    setSelected(file)
+    setPendingAnchor(null)
+  }, [])
+
   if (!repo) {
     return (
       <div className="app">
@@ -173,7 +184,7 @@ export default function App(): React.JSX.Element {
               <Sidebar
                 state={repo}
                 selected={selected?.path ?? null}
-                onSelect={setSelected}
+                onSelect={onSidebarSelect}
                 onSetMode={setMode}
               />
             </Allotment.Pane>
