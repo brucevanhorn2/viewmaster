@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { join } from 'path'
-import { readCurrentFile, readBaseFile, isRasterImagePath } from './content'
+import { readCurrentFile, readBaseFile, isRasterImagePath, isPdfPath } from './content'
 import { makeRepo, type TestRepo } from './testRepo'
 
 let repo: TestRepo
@@ -33,6 +33,15 @@ describe('readCurrentFile', () => {
     expect(await readCurrentFile(join(repo.root, 'photo.png'))).toEqual({
       kind: 'image',
       mime: 'image/png',
+      base64: bytes.toString('base64')
+    })
+  })
+
+  it('classifies a PDF by extension, base64-encoded', async () => {
+    const bytes = Buffer.from('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n', 'binary')
+    await repo.write('doc.pdf', bytes)
+    expect(await readCurrentFile(join(repo.root, 'doc.pdf'))).toEqual({
+      kind: 'pdf',
       base64: bytes.toString('base64')
     })
   })
@@ -72,10 +81,29 @@ describe('readCurrentFile', () => {
     })
   })
 
+  it('applies the larger 25MB PDF cap instead of the 2MB text/binary cap', async () => {
+    // Over the 2MB text cap, under the 25MB PDF cap.
+    const big = Buffer.alloc(3 * 1024 * 1024, 0x25)
+    await repo.write('big.pdf', big)
+    expect(await readCurrentFile(join(repo.root, 'big.pdf'))).toEqual({
+      kind: 'pdf',
+      base64: big.toString('base64')
+    })
+  })
+
   it('rejects a raster image over the 10MB image size cap', async () => {
     const big = Buffer.alloc(11 * 1024 * 1024, 0x61)
     await repo.write('huge.png', big)
     expect(await readCurrentFile(join(repo.root, 'huge.png'))).toEqual({
+      kind: 'too-large',
+      size: big.length
+    })
+  })
+
+  it('rejects a PDF over the 25MB size cap', async () => {
+    const big = Buffer.alloc(26 * 1024 * 1024, 0x25)
+    await repo.write('huge.pdf', big)
+    expect(await readCurrentFile(join(repo.root, 'huge.pdf'))).toEqual({
       kind: 'too-large',
       size: big.length
     })
@@ -119,6 +147,20 @@ describe('isRasterImagePath', () => {
     expect(isRasterImagePath('icon.svg')).toBe(false)
     expect(isRasterImagePath('notes.txt')).toBe(false)
     expect(isRasterImagePath('Makefile')).toBe(false)
+  })
+})
+
+describe('isPdfPath', () => {
+  it('is true for .pdf, case-insensitively', () => {
+    expect(isPdfPath('doc.pdf')).toBe(true)
+    expect(isPdfPath('doc.PDF')).toBe(true)
+    expect(isPdfPath('doc.Pdf')).toBe(true)
+  })
+
+  it('is false for non-pdf extensions and no extension', () => {
+    expect(isPdfPath('notes.txt')).toBe(false)
+    expect(isPdfPath('photo.png')).toBe(false)
+    expect(isPdfPath('Makefile')).toBe(false)
   })
 })
 

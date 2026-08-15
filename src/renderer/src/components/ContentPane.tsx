@@ -7,6 +7,7 @@ import MarkdownView from './MarkdownView'
 import Placeholder from './Placeholder'
 import ImageView from './ImageView'
 import { rasterDataUrl, svgDataUrl } from '../image/dataUrl'
+import PdfView from './PdfView'
 
 type Mode = 'view' | 'marks' | 'code' | 'diff'
 
@@ -117,6 +118,8 @@ export default function ContentPane({
     )
   } else if (content.kind === 'missing') {
     body = <Placeholder title="File not found" detail={file.absPath} />
+  } else if (content.kind === 'pdf') {
+    body = <PdfView base64={content.base64} />
   } else if (isSvg(file.path) && mode === 'code') {
     body = <CodeView fileName={fileName} content={content.content} />
   } else if (isSvg(file.path)) {

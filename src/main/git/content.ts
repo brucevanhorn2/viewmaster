@@ -5,6 +5,7 @@ import { runGit } from './run'
 
 const MAX_SIZE = 2 * 1024 * 1024
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024
+const MAX_PDF_SIZE = 25 * 1024 * 1024
 const BINARY_SNIFF_BYTES = 8192
 
 const RASTER_IMAGE_MIME: Record<string, string> = {
@@ -15,12 +16,19 @@ const RASTER_IMAGE_MIME: Record<string, string> = {
   '.webp': 'image/webp'
 }
 
+const PDF_EXTENSION = '.pdf'
+
 /** True when a path's extension is a recognized raster image type. */
 export function isRasterImagePath(path: string): boolean {
   return extname(path).toLowerCase() in RASTER_IMAGE_MIME
 }
 
-/** Read a file from disk, classifying image / binary / oversized / missing content. */
+/** True when a path's extension is `.pdf` (case-insensitive). */
+export function isPdfPath(path: string): boolean {
+  return extname(path).toLowerCase() === PDF_EXTENSION
+}
+
+/** Read a file from disk, classifying image / PDF / binary / oversized / missing content. */
 export async function readCurrentFile(absPath: string): Promise<FileContent> {
   let size: number
   try {
@@ -37,6 +45,16 @@ export async function readCurrentFile(absPath: string): Promise<FileContent> {
     try {
       const buffer = await readFile(absPath)
       return { kind: 'image', mime: rasterMime, base64: buffer.toString('base64') }
+    } catch {
+      return { kind: 'missing' }
+    }
+  }
+
+  if (isPdfPath(absPath)) {
+    if (size > MAX_PDF_SIZE) return { kind: 'too-large', size }
+    try {
+      const buffer = await readFile(absPath)
+      return { kind: 'pdf', base64: buffer.toString('base64') }
     } catch {
       return { kind: 'missing' }
     }

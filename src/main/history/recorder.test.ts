@@ -96,6 +96,19 @@ describe('recorder capture', () => {
     spy.mockRestore()
   })
 
+  it('skips PDF files without reading or capturing them', async () => {
+    await setup()
+    const spy = vi.spyOn(content, 'readCurrentFile')
+    const rec = createRecorder(repo.root, { historyBaseDir: base, settleMs: 5 })
+    await repo.write('doc.pdf', Buffer.alloc(3 * 1024 * 1024, 0x25))
+    rec.handleEvent('doc.pdf')
+    await rec.flush()
+    expect(spy).not.toHaveBeenCalled()
+    expect(await readVersions(historyPaths(base, repo.root).logFile('doc.pdf'))).toEqual([])
+    await rec.close()
+    spy.mockRestore()
+  })
+
   it('prunes versions at/older than the last commit on a .git/HEAD event', async () => {
     await setup()
     const rec = createRecorder(repo.root, { historyBaseDir: base, settleMs: 5 })

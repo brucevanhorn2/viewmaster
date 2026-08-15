@@ -2,7 +2,7 @@ import { createHash } from 'crypto'
 import { readdir } from 'fs/promises'
 import { join } from 'path'
 import type { HistoryVersion } from '@shared/types'
-import { isRasterImagePath, readCurrentFile } from '../git/content'
+import { isPdfPath, isRasterImagePath, readCurrentFile } from '../git/content'
 import { runGit } from '../git/run'
 import { historyPaths } from './paths'
 import {
@@ -52,7 +52,7 @@ export function createRecorder(root: string, options: RecorderOptions): Recorder
   }
 
   const capture = async (relPath: string): Promise<void> => {
-    if (isRasterImagePath(relPath)) return
+    if (isRasterImagePath(relPath) || isPdfPath(relPath)) return
     const fc = await readCurrentFile(join(root, relPath))
     if (fc.kind !== 'text') return
     const content = fc.content
