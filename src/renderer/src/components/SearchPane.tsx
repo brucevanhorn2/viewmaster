@@ -15,6 +15,7 @@ export default function SearchPane({
   const [query, setQuery] = useState('')
   const [matches, setMatches] = useState<SearchMatch[]>([])
   const [truncated, setTruncated] = useState(false)
+  const [searching, setSearching] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const requestIdRef = useRef(0)
 
@@ -24,17 +25,28 @@ export default function SearchPane({
 
   useEffect(() => {
     if (query.trim() === '') {
+      ++requestIdRef.current
       setMatches([])
       setTruncated(false)
+      setSearching(false)
       return
     }
     const timer = setTimeout(() => {
       const requestId = ++requestIdRef.current
-      void window.viewmaster.search(query).then((result) => {
-        if (requestIdRef.current !== requestId) return
-        setMatches(result.matches)
-        setTruncated(result.truncated)
-      })
+      setSearching(true)
+      void window.viewmaster.search(query)
+        .then((result) => {
+          if (requestIdRef.current !== requestId) return
+          setMatches(result.matches)
+          setTruncated(result.truncated)
+          setSearching(false)
+        })
+        .catch(() => {
+          if (requestIdRef.current !== requestId) return
+          setMatches([])
+          setTruncated(false)
+          setSearching(false)
+        })
     }, DEBOUNCE_MS)
     return () => clearTimeout(timer)
   }, [query])
@@ -62,7 +74,7 @@ export default function SearchPane({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-      {query.trim() !== '' && matches.length === 0 && (
+      {!searching && query.trim() !== '' && matches.length === 0 && (
         <div className="search-empty">No matches.</div>
       )}
       <ul className="search-results">
