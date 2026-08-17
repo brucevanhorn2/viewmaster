@@ -325,6 +325,12 @@ body {
   flex-shrink: 0;
 }
 
+.toolbar-nav {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .toolbar-button {
   background: transparent;
   color: var(--fg);
