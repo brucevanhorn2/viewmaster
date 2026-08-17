@@ -211,13 +211,14 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
 
   ipcMain.handle('search:query', async (_e, query: string): Promise<SearchResult> => {
     currentSearchController?.abort()
-    if (!session) return { matches: [], truncated: false }
+    const activeSession = session
+    if (!activeSession) return { matches: [], truncated: false }
     const controller = new AbortController()
     currentSearchController = controller
-    const paths = session.baseline
-      ? await listGitTree(session.root)
-      : await listFolderTree(session.root)
-    return searchFiles(session.root, paths, query, { signal: controller.signal })
+    const paths = activeSession.baseline
+      ? await listGitTree(activeSession.root)
+      : await listFolderTree(activeSession.root)
+    return searchFiles(activeSession.root, paths, query, { signal: controller.signal })
   })
 }
 
