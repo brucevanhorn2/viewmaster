@@ -78,25 +78,32 @@ async function scanOneFile(
 
   const results: SearchMatch[] = []
   let capped = false
+  const stream = createReadStream(absPath, { encoding: 'utf8' })
   const rl = createInterface({
-    input: createReadStream(absPath, { encoding: 'utf8' }),
+    input: stream,
     crlfDelay: Infinity
   })
   let lineNumber = 0
   try {
-    for await (const line of rl) {
-      lineNumber++
-      const column = line.toLowerCase().indexOf(needle)
-      if (column === -1) continue
-      const { preview, previewColumn } = extractPreview(line, column)
-      results.push({ path: relPath, absPath, line: lineNumber, column, preview, previewColumn })
-      if (results.length >= maxMatches) {
-        capped = true
-        break
+    try {
+      for await (const line of rl) {
+        lineNumber++
+        const column = line.toLowerCase().indexOf(needle)
+        if (column === -1) continue
+        const { preview, previewColumn } = extractPreview(line, column)
+        results.push({ path: relPath, absPath, line: lineNumber, column, preview, previewColumn })
+        if (results.length >= maxMatches) {
+          capped = true
+          break
+        }
       }
+    } catch {
+      // Stream error (file deleted, permissions changed, etc.) — skip this file,
+      // don't fail the entire search. Return whatever matches were found so far.
     }
   } finally {
     rl.close()
+    stream.destroy()
   }
   return { matches: results, capped }
 }
