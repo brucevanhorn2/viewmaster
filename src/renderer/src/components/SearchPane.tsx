@@ -31,9 +31,9 @@ export default function SearchPane({
       setSearching(false)
       return
     }
+    setSearching(true)
     const timer = setTimeout(() => {
       const requestId = ++requestIdRef.current
-      setSearching(true)
       void window.viewmaster.search(query)
         .then((result) => {
           if (requestIdRef.current !== requestId) return
