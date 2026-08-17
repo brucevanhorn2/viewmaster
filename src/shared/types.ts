@@ -58,3 +58,8 @@ export interface SearchMatch {
   /** 0-based character offset of the match within `preview`. */
   previewColumn: number
 }
+
+export interface SearchResult {
+  matches: SearchMatch[]
+  truncated: boolean
+}
