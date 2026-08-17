@@ -65,10 +65,18 @@ export default function ContentPane({
 
   // A line-targeted navigation into a markdown file needs the raw-text
   // 'code' mode to be meaningful (a rendered-HTML view has no line-number
-  // mapping) -- force it once, when the target first arrives. This never
-  // resets mode back on consumption (target -> null); once switched to
-  // 'code' for a jump, the user's own subsequent mode choice is a normal
-  // toggle, not something this effect should fight.
+  // mapping) -- force it once, when the target first arrives. Unlike
+  // anchor-kind targets, a line-kind target is deliberately never consumed
+  // (there's no onTargetConsumed call for it): CodeView's highlight
+  // decoration depends on revealLine staying present as a prop, so clearing
+  // it would erase the highlight right after showing it. That means the
+  // user's own subsequent mode choice is only respected for the rest of the
+  // *current* visit to this history entry -- if they navigate away and
+  // later come back to the same entry via Back/Forward, file?.path changes
+  // (or this effect re-fires) and the still-present line target re-forces
+  // 'code' mode, overriding whatever mode they'd left it in. That's
+  // intentional: revisiting a search-jump entry should re-show the
+  // highlighted line, the same as re-clicking the search result.
   useEffect(() => {
     if (file && isMarkdown(file.path) && navigationTarget?.kind === 'line') {
       setMode('code')
