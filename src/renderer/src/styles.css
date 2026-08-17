@@ -681,3 +681,9 @@ body {
 .history-row.sel-compare .history-dot {
   background: #4da3ff;
 }
+
+/* ---- code view line highlight ---- */
+
+.code-view-highlight-line {
+  background: rgba(77, 163, 255, 0.15);
+}
