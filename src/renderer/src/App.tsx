@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
-import type { ChangedFile, HistoryVersion, RepoState, SidebarMode } from '@shared/types'
+import type { ChangedFile, HistoryVersion, RepoState, SearchMatch, SidebarMode } from '@shared/types'
 import Sidebar from './components/Sidebar'
 import ContentPane from './components/ContentPane'
 import HistoryPane from './components/HistoryPane'
+import SearchPane from './components/SearchPane'
 import {
   defaultSelection,
   singleClickSelection,
@@ -169,6 +170,19 @@ export default function App(): React.JSX.Element {
   const onGoBack = useCallback((): void => setNavState((s) => goBack(s)), [])
   const onGoForward = useCallback((): void => setNavState((s) => goForward(s)), [])
 
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  useEffect(() => window.viewmaster.onMenuFindInFiles(() => setSearchOpen(true)), [])
+
+  const onSelectMatch = useCallback(
+    (match: SearchMatch): void => {
+      navigateTo(match.absPath, { kind: 'line', line: match.line })
+    },
+    [navigateTo]
+  )
+
+  const onCloseSearch = useCallback((): void => setSearchOpen(false), [])
+
   const navigationTarget = currentEntry(navState)?.target ?? null
 
   // Marks the current entry's target as handled so a re-render doesn't keep
@@ -214,6 +228,9 @@ export default function App(): React.JSX.Element {
                 isGitRepo={repo?.kind === 'repo'}
                 onSelect={onSelectRevision}
               />
+            </Allotment.Pane>
+            <Allotment.Pane visible={searchOpen} preferredSize={240} minSize={120}>
+              <SearchPane open={searchOpen} onSelectMatch={onSelectMatch} onClose={onCloseSearch} />
             </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>
