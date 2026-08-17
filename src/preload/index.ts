@@ -25,6 +25,7 @@ const api = {
     subscribe('repo:changed', cb),
   onMenuOpenFolder: (cb: (root: string) => void): (() => void) =>
     subscribe('menu:openFolder', cb),
+  onMenuFindInFiles: (cb: () => void): (() => void) => subscribe<void>('menu:findInFiles', () => cb()),
   onHistoryChanged: (cb: (relPath: string) => void): (() => void) =>
     subscribe('history:changed', cb),
   historyList: (relPath: string): Promise<HistoryVersion[]> =>

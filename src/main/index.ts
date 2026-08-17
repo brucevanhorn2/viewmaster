@@ -18,6 +18,10 @@ function sendOpenFolder(root: string): void {
   getMainWindow()?.webContents.send('menu:openFolder', root)
 }
 
+function sendFindInFiles(): void {
+  getMainWindow()?.webContents.send('menu:findInFiles')
+}
+
 async function pickFolder(): Promise<void> {
   const win = getMainWindow()
   if (!win) return
@@ -47,6 +51,16 @@ function buildMenu(): void {
         },
         { type: 'separator' },
         process.platform === 'darwin' ? { role: 'close' } : { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Search',
+      submenu: [
+        {
+          label: 'Find in Files…',
+          accelerator: 'CmdOrCtrl+Shift+F',
+          click: () => sendFindInFiles()
+        }
       ]
     },
     { role: 'editMenu' },
