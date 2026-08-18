@@ -15,6 +15,7 @@ export default function SearchPane({
   const [query, setQuery] = useState('')
   const [matches, setMatches] = useState<SearchMatch[]>([])
   const [truncated, setTruncated] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const requestIdRef = useRef(0)
@@ -28,6 +29,7 @@ export default function SearchPane({
       ++requestIdRef.current
       setMatches([])
       setTruncated(false)
+      setError(null)
       setSearching(false)
       return
     }
@@ -39,12 +41,14 @@ export default function SearchPane({
           if (requestIdRef.current !== requestId) return
           setMatches(result.matches)
           setTruncated(result.truncated)
+          setError(result.error ?? null)
           setSearching(false)
         })
         .catch(() => {
           if (requestIdRef.current !== requestId) return
           setMatches([])
           setTruncated(false)
+          setError('Search failed.')
           setSearching(false)
         })
     }, DEBOUNCE_MS)
@@ -74,7 +78,8 @@ export default function SearchPane({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-      {!searching && query.trim() !== '' && matches.length === 0 && (
+      {error && <div className="search-error">{error}</div>}
+      {!error && !searching && query.trim() !== '' && matches.length === 0 && (
         <div className="search-empty">No matches.</div>
       )}
       <ul className="search-results">

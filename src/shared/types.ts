@@ -62,4 +62,5 @@ export interface SearchMatch {
 export interface SearchResult {
   matches: SearchMatch[]
   truncated: boolean
+  error?: string
 }

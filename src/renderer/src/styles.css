@@ -740,6 +740,11 @@ body {
   color: #777;
   font-size: 12px;
 }
+.search-error {
+  padding: 8px 10px;
+  color: #f48771;
+  font-size: 12px;
+}
 .search-results {
   list-style: none;
   margin: 0;

@@ -215,10 +215,14 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     if (!activeSession) return { matches: [], truncated: false }
     const controller = new AbortController()
     currentSearchController = controller
-    const paths = activeSession.baseline
-      ? await listGitTree(activeSession.root)
-      : await listFolderTree(activeSession.root)
-    return searchFiles(activeSession.root, paths, query, { signal: controller.signal })
+    try {
+      const paths = activeSession.baseline
+        ? await listGitTree(activeSession.root)
+        : await listFolderTree(activeSession.root)
+      return await searchFiles(activeSession.root, paths, query, { signal: controller.signal })
+    } catch (err) {
+      return { matches: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
+    }
   })
 }
 
