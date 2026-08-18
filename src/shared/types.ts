@@ -44,3 +44,23 @@ export interface HistoryVersion {
   /** Byte length of the captured content. */
   size: number
 }
+
+export interface SearchMatch {
+  /** Repo-relative path, forward slashes. */
+  path: string
+  absPath: string
+  /** 1-based line number. */
+  line: number
+  /** 0-based character offset of the match within the full line. */
+  column: number
+  /** Display snippet of the line, re-centered/truncated for very long lines. */
+  preview: string
+  /** 0-based character offset of the match within `preview`. */
+  previewColumn: number
+}
+
+export interface SearchResult {
+  matches: SearchMatch[]
+  truncated: boolean
+  error?: string
+}

@@ -1,6 +1,13 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import type { FSWatcher } from 'fs'
-import type { BaselineKind, FileContent, HistoryVersion, RepoState, SidebarMode } from '@shared/types'
+import type {
+  BaselineKind,
+  FileContent,
+  HistoryVersion,
+  RepoState,
+  SearchResult,
+  SidebarMode
+} from '@shared/types'
 import { runGit } from './git/run'
 import { resolveBaseline } from './git/baseline'
 import { collectChanges } from './git/changes'
@@ -10,7 +17,8 @@ import { addRecentFolder, getFolderMode, getRecentFolders, setFolderMode } from 
 import { createRecorder, type Recorder } from './history/recorder'
 import { historyPaths } from './history/paths'
 import { getObject, readVersions } from './history/store'
-import { browseFiles, listFolderTree, toUnchangedFiles } from './files/browse'
+import { browseFiles, listFolderTree, listGitTree, toUnchangedFiles } from './files/browse'
+import { searchFiles } from './search/scan'
 
 const RECOMPUTE_DEBOUNCE_MS = 300
 
@@ -23,8 +31,11 @@ interface Session {
 }
 
 let session: Session | null = null
+let currentSearchController: AbortController | null = null
 
 async function closeSession(): Promise<void> {
+  currentSearchController?.abort()
+  currentSearchController = null
   if (session) {
     await session.watcher.close()
     if (session.recorder) await session.recorder.close()
@@ -197,6 +208,22 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
       return await getObject(paths.objectsDir, sha)
     } catch {
       return ''
+    }
+  })
+
+  ipcMain.handle('search:query', async (_e, query: string): Promise<SearchResult> => {
+    currentSearchController?.abort()
+    const activeSession = session
+    if (!activeSession) return { matches: [], truncated: false }
+    const controller = new AbortController()
+    currentSearchController = controller
+    try {
+      const paths = activeSession.baseline
+        ? await listGitTree(activeSession.root)
+        : await listFolderTree(activeSession.root)
+      return await searchFiles(activeSession.root, paths, query, { signal: controller.signal })
+    } catch (err) {
+      return { matches: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
 }
