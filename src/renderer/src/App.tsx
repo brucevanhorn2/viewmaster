@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
 import type { ChangedFile, HistoryVersion, RepoState, SearchMatch, SidebarMode } from '@shared/types'
@@ -59,7 +59,6 @@ function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Elem
 
 export default function App(): React.JSX.Element {
   const [repo, setRepo] = useState<RepoState | null>(null)
-  const [selected, setSelected] = useState<ChangedFile | null>(null)
   const [navState, setNavState] = useState(initialNavigationState())
   const [refreshKey, setRefreshKey] = useState(0)
   const [versions, setVersions] = useState<HistoryVersion[]>([])
@@ -100,6 +99,40 @@ export default function App(): React.JSX.Element {
   // they don't otherwise trigger a refresh.)
   useEffect(() => window.viewmaster.onHistoryChanged(() => setHistoryTick((t) => t + 1)), [])
 
+  /**
+   * Resolves an absPath against the current repo listing, synthesizing an
+   * "unchanged" entry for a target outside it (e.g. a link/search jump to a
+   * file with no git-changed entry in Changed mode) — the same convention
+   * Browse Mode's overlayStatus already uses for untouched files.
+   */
+  const resolveChangedFile = useCallback(
+    (absPath: string): ChangedFile | null => {
+      if (!repo || (repo.kind !== 'repo' && repo.kind !== 'folder')) return null
+      const existing = repo.files.find((f) => f.absPath === absPath)
+      if (existing) return existing
+      const rel = absPath.startsWith(repo.root)
+        ? absPath.slice(repo.root.length).replace(/^\/+/, '')
+        : absPath
+      return { path: rel, absPath, status: 'unchanged' }
+    },
+    [repo]
+  )
+
+  // `selected` always mirrors the nav stack's current entry, re-resolved
+  // against the latest `repo` listing (e.g. after a watcher-driven refresh
+  // changes a file's status). Derived directly during render rather than
+  // via a separate `useState` synced by an effect, so it can never lag
+  // `navigationTarget` (below) by a render tick — both come from the same
+  // `navState` read in the same pass. That lag was real: ContentPane's
+  // mode-forcing effect keys on [file?.path, navigationTarget], so a stale
+  // `file` paired with a fresh `navigationTarget` could transiently force
+  // code-mode against the *previous* file for one render after a search
+  // jump between two markdown files.
+  const selected = useMemo(() => {
+    const entry = currentEntry(navState)
+    return entry ? resolveChangedFile(entry.absPath) : null
+  }, [navState, resolveChangedFile])
+
   // Reset the revision selection whenever the selected file changes.
   useEffect(() => {
     setSelection(defaultSelection())
@@ -128,33 +161,6 @@ export default function App(): React.JSX.Element {
     },
     [versions]
   )
-
-  /**
-   * Resolves an absPath against the current repo listing, synthesizing an
-   * "unchanged" entry for a target outside it (e.g. a link/search jump to a
-   * file with no git-changed entry in Changed mode) — the same convention
-   * Browse Mode's overlayStatus already uses for untouched files.
-   */
-  const resolveChangedFile = useCallback(
-    (absPath: string): ChangedFile | null => {
-      if (!repo || (repo.kind !== 'repo' && repo.kind !== 'folder')) return null
-      const existing = repo.files.find((f) => f.absPath === absPath)
-      if (existing) return existing
-      const rel = absPath.startsWith(repo.root)
-        ? absPath.slice(repo.root.length).replace(/^\/+/, '')
-        : absPath
-      return { path: rel, absPath, status: 'unchanged' }
-    },
-    [repo]
-  )
-
-  // `selected` always mirrors the nav stack's current entry, re-resolved
-  // against the latest `repo` listing (e.g. after a watcher-driven refresh
-  // changes a file's status).
-  useEffect(() => {
-    const entry = currentEntry(navState)
-    setSelected(entry ? resolveChangedFile(entry.absPath) : null)
-  }, [navState, resolveChangedFile])
 
   const navigateTo = useCallback((absPath: string, target?: NavigationTarget): void => {
     setNavState((s) => pushEntry(s, { absPath, target }))

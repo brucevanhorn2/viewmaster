@@ -34,6 +34,8 @@ let session: Session | null = null
 let currentSearchController: AbortController | null = null
 
 async function closeSession(): Promise<void> {
+  currentSearchController?.abort()
+  currentSearchController = null
   if (session) {
     await session.watcher.close()
     if (session.recorder) await session.recorder.close()
