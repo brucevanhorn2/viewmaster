@@ -28,6 +28,7 @@ interface Session {
   mode: SidebarMode
   watcher: FSWatcher
   recorder: Recorder | null
+  searchPaths: string[] | null
 }
 
 let session: Session | null = null
@@ -121,6 +122,7 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
         const fresh = await computeRepoState(watchRoot, currentMode)
         if (session?.root !== watchRoot || session.mode !== currentMode) return // repo switched or mode toggled — drop stale update
         if (fresh.kind === 'repo') session.baseline = fresh.baseline
+        session.searchPaths = null
         // Resolve the window at send time — the window that opened the repo
         // may have been closed and replaced since.
         const win = getWindow()
@@ -136,7 +138,8 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
       // 'changed' default), but only 'repo' sessions actually consult it.
       mode: state.kind === 'repo' ? state.mode : 'browse',
       watcher,
-      recorder
+      recorder,
+      searchPaths: null
     }
   }
 
@@ -217,11 +220,17 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     if (!activeSession) return { matches: [], truncated: false }
     const controller = new AbortController()
     currentSearchController = controller
+    const startedAt = Date.now()
     try {
-      const paths = activeSession.baseline
-        ? await listGitTree(activeSession.root)
-        : await listFolderTree(activeSession.root)
-      return await searchFiles(activeSession.root, paths, query, { signal: controller.signal })
+      if (activeSession.searchPaths === null) {
+        activeSession.searchPaths = activeSession.baseline
+          ? await listGitTree(activeSession.root)
+          : await listFolderTree(activeSession.root)
+      }
+      return await searchFiles(activeSession.root, activeSession.searchPaths, query, {
+        signal: controller.signal,
+        startedAt
+      })
     } catch (err) {
       return { matches: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
     }
