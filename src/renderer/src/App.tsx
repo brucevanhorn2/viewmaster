@@ -173,6 +173,8 @@ export default function App(): React.JSX.Element {
   const [searchOpen, setSearchOpen] = useState(false)
 
   useEffect(() => window.viewmaster.onMenuFindInFiles(() => setSearchOpen(true)), [])
+  useEffect(() => window.viewmaster.onMenuGoBack(onGoBack), [onGoBack])
+  useEffect(() => window.viewmaster.onMenuGoForward(onGoForward), [onGoForward])
 
   const onSelectMatch = useCallback(
     (match: SearchMatch): void => {

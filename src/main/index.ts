@@ -22,6 +22,14 @@ function sendFindInFiles(): void {
   getMainWindow()?.webContents.send('menu:findInFiles')
 }
 
+function sendGoBack(): void {
+  getMainWindow()?.webContents.send('menu:goBack')
+}
+
+function sendGoForward(): void {
+  getMainWindow()?.webContents.send('menu:goForward')
+}
+
 async function pickFolder(): Promise<void> {
   const win = getMainWindow()
   if (!win) return
@@ -60,6 +68,21 @@ function buildMenu(): void {
           label: 'Find in Files…',
           accelerator: 'CmdOrCtrl+Shift+F',
           click: () => sendFindInFiles()
+        }
+      ]
+    },
+    {
+      label: 'Go',
+      submenu: [
+        {
+          label: 'Back',
+          accelerator: process.platform === 'darwin' ? 'Cmd+[' : 'Alt+Left',
+          click: () => sendGoBack()
+        },
+        {
+          label: 'Forward',
+          accelerator: process.platform === 'darwin' ? 'Cmd+]' : 'Alt+Right',
+          click: () => sendGoForward()
         }
       ]
     },

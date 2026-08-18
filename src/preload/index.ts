@@ -26,6 +26,8 @@ const api = {
   onMenuOpenFolder: (cb: (root: string) => void): (() => void) =>
     subscribe('menu:openFolder', cb),
   onMenuFindInFiles: (cb: () => void): (() => void) => subscribe<void>('menu:findInFiles', () => cb()),
+  onMenuGoBack: (cb: () => void): (() => void) => subscribe<void>('menu:goBack', () => cb()),
+  onMenuGoForward: (cb: () => void): (() => void) => subscribe<void>('menu:goForward', () => cb()),
   onHistoryChanged: (cb: (relPath: string) => void): (() => void) =>
     subscribe('history:changed', cb),
   historyList: (relPath: string): Promise<HistoryVersion[]> =>
