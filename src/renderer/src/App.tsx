@@ -232,7 +232,12 @@ export default function App(): React.JSX.Element {
               />
             </Allotment.Pane>
             <Allotment.Pane visible={searchOpen} preferredSize={240} minSize={120}>
-              <SearchPane open={searchOpen} onSelectMatch={onSelectMatch} onClose={onCloseSearch} />
+              <SearchPane
+                key={repo?.root ?? 'none'}
+                open={searchOpen}
+                onSelectMatch={onSelectMatch}
+                onClose={onCloseSearch}
+              />
             </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>
