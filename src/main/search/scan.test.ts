@@ -89,4 +89,44 @@ describe('searchFiles', () => {
     })
     expect(matches).toEqual([])
   })
+
+  it('caps total matches across files and marks the result truncated', async () => {
+    // 600 one-match files, well beyond the CONCURRENCY (24) worker pool, so
+    // the queue isn't fully drained (all files dispatched) before the
+    // running total crosses MAX_MATCHES_TOTAL (500) — with too few files
+    // relative to concurrency, every file gets dispatched while there's
+    // still plenty of budget left, and the total cap never has a chance to
+    // engage. One match per file also keeps this test decoupled from the
+    // per-file cap (covered separately below).
+    const paths: string[] = []
+    for (let i = 0; i < 600; i++) {
+      const path = `file${i}.txt`
+      await repo.write(path, `needle ${i}\n`)
+      paths.push(path)
+    }
+    const { matches, truncated } = await searchFiles(repo.root, paths, 'needle')
+    expect(truncated).toBe(true)
+    // Caps are soft under concurrency (scan.ts's own doc comment) — assert
+    // the cap was actually reached, not an exact count.
+    expect(matches.length).toBeGreaterThanOrEqual(500)
+  })
+
+  it('stops scanning promptly when aborted mid-scan rather than completing anyway', async () => {
+    const paths: string[] = []
+    for (let i = 0; i < 200; i++) {
+      const path = `file${i}.txt`
+      await repo.write(path, `needle ${i}\n`)
+      paths.push(path)
+    }
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(), 0)
+    const { matches } = await searchFiles(repo.root, paths, 'needle', {
+      signal: controller.signal
+    })
+    // An unaborted run over these 200 one-match files would find 200
+    // matches. Aborting on the same tick the scan starts must leave most
+    // of the 200 files unscanned (only files already in flight when the
+    // abort fires — at most CONCURRENCY of them — can still complete).
+    expect(matches.length).toBeLessThan(200)
+  })
 })
