@@ -20,6 +20,7 @@ import { createRecorder, type Recorder } from './history/recorder'
 import { historyPaths } from './history/paths'
 import { getObject, readVersions } from './history/store'
 import { browseFiles, listFolderTree, listGitTree, toUnchangedFiles } from './files/browse'
+import { readResource, resolveWithinRoot } from './files/resource'
 import { searchFiles } from './search/scan'
 import { looksLikeDefinition } from './search/definitionHeuristics'
 
@@ -224,6 +225,11 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     return readBaseFile(root, base, relPath)
   })
 
+  ipcMain.handle('file:readResource', (_e, absPath: string): Promise<{ base64: string; mime: string } | null> => {
+    if (!session) return Promise.resolve(null)
+    return readResource(absPath, session.root)
+  })
+
   ipcMain.handle('app:recentFolders', (): string[] => getRecentFolders())
 
   ipcMain.handle('app:copyPath', (_e, absPath: string): void => {
@@ -236,6 +242,13 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
 
   ipcMain.handle('app:openExternal', (_e, url: string): void => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)
+  })
+
+  ipcMain.handle('app:openInBrowser', async (_e, absPath: string): Promise<void> => {
+    if (!session) return
+    const real = await resolveWithinRoot(absPath, session.root)
+    if (!real) return
+    void shell.openPath(real)
   })
 
   ipcMain.handle('history:list', async (_e, relPath: string): Promise<HistoryVersion[]> => {

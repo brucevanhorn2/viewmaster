@@ -21,6 +21,8 @@ const api = {
   setMode: (mode: SidebarMode): Promise<RepoState | null> => ipcRenderer.invoke('mode:set', mode),
   readFile: (absPath: string): Promise<FileContent> => ipcRenderer.invoke('file:read', absPath),
   readBaseFile: (relPath: string): Promise<string> => ipcRenderer.invoke('file:readBase', relPath),
+  readResource: (absPath: string): Promise<{ base64: string; mime: string } | null> =>
+    ipcRenderer.invoke('file:readResource', absPath),
   recentFolders: (): Promise<string[]> => ipcRenderer.invoke('app:recentFolders'),
   copyPath: (absPath: string): void => {
     void ipcRenderer.invoke('app:copyPath', absPath)
@@ -30,6 +32,9 @@ const api = {
   },
   openExternal: (url: string): void => {
     void ipcRenderer.invoke('app:openExternal', url)
+  },
+  openInBrowser: (absPath: string): void => {
+    void ipcRenderer.invoke('app:openInBrowser', absPath)
   },
   onRepoChanged: (cb: (state: RepoState) => void): (() => void) =>
     subscribe('repo:changed', cb),
