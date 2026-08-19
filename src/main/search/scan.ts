@@ -22,6 +22,10 @@ export interface SearchScanOptions {
   mode?: 'substring' | 'word'
   caseSensitive?: boolean
   lineFilter?: (line: string) => boolean
+  /** When set (with mode: 'word'), matches ANY of these words instead of
+   * `query` — each independently \b-bounded. `query` is still required
+   * non-empty (used only for the early-exit check on blank input). */
+  words?: string[]
 }
 
 export interface SearchScanResult {
@@ -69,7 +73,8 @@ async function scanOneFile(
   maxMatches: number,
   mode: 'substring' | 'word',
   caseSensitive: boolean,
-  lineFilter?: (line: string) => boolean
+  lineFilter?: (line: string) => boolean,
+  words?: string[]
 ): Promise<{ matches: SearchMatch[]; capped: boolean }> {
   if (maxMatches <= 0) return { matches: [], capped: false }
 
@@ -91,7 +96,12 @@ async function scanOneFile(
   const results: SearchMatch[] = []
   let capped = false
   const wordPattern =
-    mode === 'word' ? new RegExp(`\\b${escapeRegExp(needle)}\\b`, caseSensitive ? 'g' : 'gi') : null
+    mode === 'word'
+      ? new RegExp(
+          (words && words.length > 0 ? words : [needle]).map((w) => `\\b${escapeRegExp(w)}\\b`).join('|'),
+          caseSensitive ? 'g' : 'gi'
+        )
+      : null
   const stream = createReadStream(absPath, { encoding: 'utf8' })
   const rl = createInterface({
     input: stream,
@@ -209,7 +219,8 @@ export async function searchFiles(
       perFileCap,
       mode,
       caseSensitive,
-      lineFilter
+      lineFilter,
+      options.words
     )
     matches.push(...fileMatches)
     if (capped) truncated = true

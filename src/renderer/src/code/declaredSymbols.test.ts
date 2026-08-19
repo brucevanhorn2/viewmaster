@@ -31,4 +31,13 @@ describe('extractDeclaredNames', () => {
   it('returns an empty array for a file with no declarations', () => {
     expect(extractDeclaredNames('return a + b\nconsole.log("hi")\n')).toEqual([])
   })
+
+  it('does not extract a declaration nested inside a function body', () => {
+    const content = 'function outer() {\n  const inner = 1\n  return inner\n}\n'
+    expect(extractDeclaredNames(content)).toEqual(['outer'])
+  })
+
+  it('extracts an exported top-level declaration', () => {
+    expect(extractDeclaredNames('export const needle = 5')).toEqual(['needle'])
+  })
 })

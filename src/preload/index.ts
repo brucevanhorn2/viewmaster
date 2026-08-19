@@ -55,7 +55,9 @@ const api = {
   findReferences: (word: string): Promise<SymbolLocationsResult> =>
     ipcRenderer.invoke('symbol:references', word),
   findImportedBy: (basename: string): Promise<SymbolLocationsResult> =>
-    ipcRenderer.invoke('related:importedBy', basename)
+    ipcRenderer.invoke('related:importedBy', basename),
+  findRelatedReferences: (names: string[]): Promise<SymbolLocationsResult> =>
+    ipcRenderer.invoke('related:references', names)
 }
 
 export type ViewmasterApi = typeof api

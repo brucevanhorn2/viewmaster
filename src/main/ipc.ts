@@ -46,6 +46,7 @@ let currentSearchController: AbortController | null = null
 let currentDefinitionsController: AbortController | null = null
 let currentReferencesController: AbortController | null = null
 let currentImportedByController: AbortController | null = null
+let currentRelatedReferencesController: AbortController | null = null
 
 /**
  * Returns the session's cached file listing, populating it if this is the
@@ -76,6 +77,8 @@ async function closeSession(): Promise<void> {
   currentReferencesController = null
   currentImportedByController?.abort()
   currentImportedByController = null
+  currentRelatedReferencesController?.abort()
+  currentRelatedReferencesController = null
   if (session) {
     await session.watcher.close()
     if (session.recorder) await session.recorder.close()
@@ -378,6 +381,38 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
           seen.add(key)
           locations.push({ path: m.path, absPath: m.absPath, line: m.line, column: m.column })
         }
+        return { locations }
+      } catch (err) {
+        return { locations: [], error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'related:references',
+    async (_e, names: string[]): Promise<SymbolLocationsResult> => {
+      currentRelatedReferencesController?.abort()
+      const activeSession = session
+      if (!activeSession) return { locations: [] }
+      if (names.length === 0) return { locations: [] }
+      const controller = new AbortController()
+      currentRelatedReferencesController = controller
+      const startedAt = Date.now()
+      try {
+        const paths = await getSearchPaths(activeSession)
+        const { matches } = await searchFiles(activeSession.root, paths, names[0], {
+          signal: controller.signal,
+          startedAt,
+          mode: 'word',
+          caseSensitive: true,
+          words: names
+        })
+        const locations: SymbolLocation[] = matches.map((m) => ({
+          path: m.path,
+          absPath: m.absPath,
+          line: m.line,
+          column: m.column
+        }))
         return { locations }
       } catch (err) {
         return { locations: [], error: err instanceof Error ? err.message : String(err) }
