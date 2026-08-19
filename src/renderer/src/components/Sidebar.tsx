@@ -18,6 +18,19 @@ interface ContextMenuState {
   isFile: boolean
 }
 
+/**
+ * Joins a native, OS-separated root path with a forward-slash-only
+ * relative path (TreeNode.path is always '/'-joined, matching
+ * ChangedFile.path's own convention, regardless of platform). Detects
+ * root's separator rather than assuming '/', since the renderer has no
+ * access to Node's path.join (contextIsolation) and a hardcoded '/' would
+ * produce a mixed-separator path like 'C:\repo/src' on Windows.
+ */
+function joinRootPath(root: string, relativePath: string): string {
+  const separator = root.includes('\\') ? '\\' : '/'
+  return `${root}${separator}${relativePath.replace(/\//g, separator)}`
+}
+
 function baselineLabel(state: RepoState & { kind: 'repo' }): string {
   const b = state.baseline
   if (b.kind === 'merge-base') return `${b.branch} vs ${b.defaultBranch}`
@@ -86,7 +99,7 @@ function DirNode({
         className="tree-row dir-row"
         style={{ paddingLeft: 8 + depth * 14 }}
         onClick={() => setExpanded(!expanded)}
-        onContextMenu={(e) => onContextMenu(e, `${root}/${node.path}`, false)}
+        onContextMenu={(e) => onContextMenu(e, joinRootPath(root, node.path), false)}
       >
         <span className={`chevron${expanded ? ' expanded' : ''}`}>›</span>
         <img className="file-icon" src={folderIconUrl(node.name, expanded)} alt="" />
