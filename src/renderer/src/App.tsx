@@ -186,7 +186,20 @@ export default function App(): React.JSX.Element {
   // the design spec's accepted gap).
   useEffect(() => {
     const disposable = monaco.editor.registerEditorOpener({
-      openCodeEditor(_source, resource, selectionOrPosition) {
+      openCodeEditor(source, resource, selectionOrPosition) {
+        // Monaco calls every registered opener for ANY "open a code
+        // editor" request, same-file included — it does not skip this
+        // callback for same-file jumps on its own (verified against
+        // AbstractCodeEditorService.openCodeEditor, which just tries
+        // registered handlers in order). Returning `false` here for a
+        // same-file target falls through to Monaco's own default handler
+        // (StandaloneCodeEditorService's built-in one, registered before
+        // ours), which moves the cursor within the current model natively
+        // — no history entry pushed, matching the design spec's decision
+        // 5. Only a genuinely different file goes through navigateTo.
+        if (source.getModel()?.uri.fsPath === resource.fsPath) {
+          return false
+        }
         const line =
           selectionOrPosition && 'lineNumber' in selectionOrPosition
             ? selectionOrPosition.lineNumber
