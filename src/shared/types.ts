@@ -64,3 +64,17 @@ export interface SearchResult {
   truncated: boolean
   error?: string
 }
+
+export interface SymbolLocation {
+  /** Repo-relative path, forward slashes. */
+  path: string
+  absPath: string
+  /** 1-based line number. */
+  line: number
+  /** 0-based character offset within the line. */
+  column: number
+}
+
+export interface SymbolLocationsResult {
+  locations: SymbolLocation[]
+}

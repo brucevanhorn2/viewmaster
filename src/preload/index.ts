@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { FileContent, HistoryVersion, RepoState, SearchResult, SidebarMode } from '@shared/types'
+import type {
+  FileContent,
+  HistoryVersion,
+  RepoState,
+  SearchResult,
+  SidebarMode,
+  SymbolLocationsResult
+} from '@shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_e: Electron.IpcRendererEvent, payload: T): void => cb(payload)
@@ -33,7 +40,11 @@ const api = {
   historyList: (relPath: string): Promise<HistoryVersion[]> =>
     ipcRenderer.invoke('history:list', relPath),
   historyRead: (sha: string): Promise<string> => ipcRenderer.invoke('history:read', sha),
-  search: (query: string): Promise<SearchResult> => ipcRenderer.invoke('search:query', query)
+  search: (query: string): Promise<SearchResult> => ipcRenderer.invoke('search:query', query),
+  findDefinitions: (word: string): Promise<SymbolLocationsResult> =>
+    ipcRenderer.invoke('symbol:definitions', word),
+  findReferences: (word: string): Promise<SymbolLocationsResult> =>
+    ipcRenderer.invoke('symbol:references', word)
 }
 
 export type ViewmasterApi = typeof api
