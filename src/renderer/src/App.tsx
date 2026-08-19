@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
+import * as monaco from 'monaco-editor'
 import type { ChangedFile, HistoryVersion, RepoState, SearchMatch, SidebarMode } from '@shared/types'
 import Sidebar from './components/Sidebar'
 import ContentPane from './components/ContentPane'
@@ -175,6 +176,29 @@ export default function App(): React.JSX.Element {
 
   const onGoBack = useCallback((): void => setNavState((s) => goBack(s)), [])
   const onGoForward = useCallback((): void => setNavState((s) => goForward(s)), [])
+
+  // Bridges Monaco's "open a different file" request (fired when either
+  // the TypeScript path's real definition/reference results, or the
+  // heuristic path's, point at a file other than the one currently open)
+  // into the app's own navigation history — the same stack Back/Forward
+  // already operate on. A same-file jump never reaches this callback;
+  // Monaco just moves the cursor within the current model instead (see
+  // the design spec's accepted gap).
+  useEffect(() => {
+    const disposable = monaco.editor.registerEditorOpener({
+      openCodeEditor(_source, resource, selectionOrPosition) {
+        const line =
+          selectionOrPosition && 'lineNumber' in selectionOrPosition
+            ? selectionOrPosition.lineNumber
+            : selectionOrPosition && 'startLineNumber' in selectionOrPosition
+              ? selectionOrPosition.startLineNumber
+              : 1
+        navigateTo(resource.fsPath, { kind: 'line', line })
+        return true
+      }
+    })
+    return () => disposable.dispose()
+  }, [navigateTo])
 
   const [searchOpen, setSearchOpen] = useState(false)
 
