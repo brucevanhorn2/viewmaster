@@ -40,4 +40,26 @@ describe('extractDeclaredNames', () => {
   it('extracts an exported top-level declaration', () => {
     expect(extractDeclaredNames('export const needle = 5')).toEqual(['needle'])
   })
+
+  it('extracts an export default function declaration', () => {
+    expect(extractDeclaredNames('export default function RelatedFilesPane({')).toEqual([
+      'RelatedFilesPane'
+    ])
+  })
+
+  it('extracts an export default class declaration', () => {
+    expect(extractDeclaredNames('export default class Foo {')).toEqual(['Foo'])
+  })
+
+  it('extracts an export abstract class declaration', () => {
+    expect(extractDeclaredNames('export abstract class Bar {')).toEqual(['Bar'])
+  })
+
+  it('extracts an export async function declaration', () => {
+    expect(extractDeclaredNames('export async function baz() {}')).toEqual(['baz'])
+  })
+
+  it('extracts a bare top-level async function declaration', () => {
+    expect(extractDeclaredNames('async function baz() {}')).toEqual(['baz'])
+  })
 })

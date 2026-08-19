@@ -5,14 +5,15 @@
  * up external references for (issue #15), not to build an accurate
  * symbol table.
  *
- * Anchored to column 0 (optionally after `export `/`declare `) as a
- * cheap proxy for "top-level, not nested inside a function" — nested
- * declarations are indented in virtually all conventionally-formatted
- * code, so an unanchored match would otherwise pull in every local
- * const/let inside every function.
+ * Anchored to column 0 (optionally after `export `/`export default `/
+ * `declare `/`abstract `/`async ` modifiers) as a cheap proxy for
+ * "top-level, not nested inside a function" — nested declarations are
+ * indented in virtually all conventionally-formatted code, so an
+ * unanchored match would otherwise pull in every local const/let inside
+ * every function.
  */
 const DECLARATION_PATTERNS = [
-  /^(?:export\s+|declare\s+)*(?:function|class|interface|type|enum|namespace|module|struct)\s+(\w+)/,
+  /^(?:export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:function|class|interface|type|enum|namespace|module|struct)\s+(\w+)/,
   /^(?:export\s+)*(?:const|let|var)\s+(\w+)\b\s*=/,
   /^def\s+(\w+)\s*\(/,
   /^func\s+(\w+)\s*\(/,
