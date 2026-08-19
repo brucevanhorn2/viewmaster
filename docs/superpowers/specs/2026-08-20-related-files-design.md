@@ -69,26 +69,40 @@ away from.
    won't have the panel open.
 
 4. **Language scope for the "Imports" extractor: TypeScript/JavaScript
-   (already built by #7), plus new Python and Go extractors.** Same
-   "light per-language parsing, not real parsing" philosophy #7 already
-   established — regex-based specifier extraction, not an AST. Priority
-   order matches #7's own (TypeScript, then Python, then Go).
+   (already built by #7), plus a new Python extractor.** Same "light
+   per-language parsing, not real parsing" philosophy #7 already
+   established — regex-based specifier extraction, not an AST, and only
+   for relative imports (`.foo`, `..pkg.mod`) — Python's absolute-style
+   dotted imports (`myapp.utils`) are out of scope for this pass, since
+   resolving them correctly needs the project's actual source root
+   (ambiguous without reading `setup.py`/`pyproject.toml`), which light
+   parsing has no honest way to determine. Go gets no "Imports" extractor
+   at all — see decision 5's Go carve-out, which applies to both import
+   edges, not just the reverse one.
 5. **A known, accepted heuristic limitation: "Imported by" can produce
    false positives for generic filenames** (e.g. two unrelated files both
    named `utils.ts` in different directories) — the search can only match
    on the bare basename, not real module resolution. No special UI
    treatment; this is the same class of honest limitation the issue's own
    non-goals already accept for the heuristic path generally.
-   **Go is a sharper case, not just noisier:** Go doesn't import
-   individual files at all — it imports *packages* (directories), so a
-   file's own basename never appears in any Go import statement
-   referencing it. "Imported by" for a `.go` file is therefore not merely
-   imprecise, it would find nothing meaningful by basename-matching. For
-   Go specifically, "Imported by" is scoped down for this pass — it
-   simply returns no results (not an error, not a broken UI, just an
-   empty section) — rather than building a separate package-path-based
-   search mechanism, which is a real, differently-shaped piece of work
-   deferred to a future pass if Go usage justifies it.
+   **Go is a sharper case, not just noisier — and it affects both import
+   edges, not only the reverse one.** Go doesn't import individual files
+   at all — it imports *packages* (module-qualified path strings like
+   `"github.com/foo/bar/pkg/util"`), resolved via `go.mod`, not via any
+   file-relative path convention. This breaks "Imported by" the same way
+   decribed above (a file's basename never appears in a Go import
+   statement referencing it), but it *also* breaks "Imports" (forward):
+   extracting the literal `import "..."` strings from Go source is easy,
+   but turning one into a candidate local file requires knowing the
+   current module's own import path root from `go.mod` — light,
+   regex-based parsing (this pass's whole approach) has no honest way to
+   do that. Both **"Imports" and "Imported by" are scoped out for Go in
+   this pass** — for a `.go` file, the panel shows only the "References"
+   section (symbol-level, which doesn't depend on Go's import model at
+   all — it's plain text search over whole-word occurrences). Real Go
+   import-graph support would mean parsing `go.mod`, a genuinely separate,
+   differently-shaped piece of work, deferred to a future pass if Go
+   usage justifies it.
 6. **Non-goals, restated from the issue verbatim:** no true call-hierarchy
    or inheritance-chain tracing (needs real language-level understanding,
    a separate, materially bigger initiative); no cross-repo or
@@ -140,12 +154,13 @@ copies).
 
 New `src/renderer/src/code/importExtractors.ts`: generalizes #7's
 `resolveImports.ts` TS/JS-specific `extractImportSpecifiers` into a
-per-language dispatch — new Python and Go specifier-extraction functions
-alongside the existing TS one, chosen by the selected file's
-`languageForFile` result. `resolveImports.ts`'s `candidateImportPaths`
-(path-joining/candidate-suffix logic) is reused for TS/JS; Python/Go get
-their own candidate-suffix lists (`.py`/`__init__.py`; `.go`) but share
-the same `posixJoin` resolution helper.
+per-language dispatch — a new Python relative-import specifier-extraction
+function alongside the existing TS one, chosen by the selected file's
+`languageForFile` result (Go is not dispatched to anything — decision 5).
+`resolveImports.ts`'s `candidateImportPaths` (path-joining/candidate-suffix
+logic) is reused for TS/JS; Python gets its own candidate-suffix list
+(`.py`, `/__init__.py`) but shares the same `posixJoin` resolution helper
+(exported from `resolveImports.ts` for this reuse).
 
 New `src/renderer/src/components/RelatedFilesPane.tsx`: fetches and
 renders the three sections (Imports / Imported by / References) for the
@@ -182,7 +197,7 @@ src/renderer/src/App.tsx                         pane wiring (modified)
 - `declaredSymbols.test.ts`: `extractDeclaredNames` extracts the same
   shapes `definitionHeuristics.ts` tests for, as names rather than
   booleans.
-- `importExtractors.test.ts`: Python and Go specifier extraction
+- `importExtractors.test.ts`: Python relative-import specifier extraction
   (parallel to `resolveImports.test.ts`'s existing TS/JS coverage).
 - No automated coverage for `RelatedFilesPane.tsx` itself or the
   `related:importedBy` IPC handler — consistent with every other
