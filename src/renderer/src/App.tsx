@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
+import * as monaco from 'monaco-editor'
 import type { ChangedFile, HistoryVersion, RepoState, SearchMatch, SidebarMode } from '@shared/types'
 import Sidebar from './components/Sidebar'
 import ContentPane from './components/ContentPane'
@@ -175,6 +176,46 @@ export default function App(): React.JSX.Element {
 
   const onGoBack = useCallback((): void => setNavState((s) => goBack(s)), [])
   const onGoForward = useCallback((): void => setNavState((s) => goForward(s)), [])
+
+  // Bridges Monaco's "open a code editor" request (fired for both the
+  // TypeScript path's and the heuristic path's definition/reference
+  // results) into the app's own navigation history — the same stack
+  // Back/Forward already operate on. Monaco calls this callback for
+  // EVERY such request, same-file jumps included (confirmed against
+  // AbstractCodeEditorService.openCodeEditor's source — it does not skip
+  // registered openers for same-resource targets on its own), so the
+  // same-file short-circuit inside openCodeEditor below is load-bearing,
+  // not defensive: without it every same-file jump would also push a
+  // history entry, contradicting the design spec's decision 5 (task 8's
+  // manual verification caught exactly this before the check was added).
+  useEffect(() => {
+    const disposable = monaco.editor.registerEditorOpener({
+      openCodeEditor(source, resource, selectionOrPosition) {
+        // Monaco calls every registered opener for ANY "open a code
+        // editor" request, same-file included — it does not skip this
+        // callback for same-file jumps on its own (verified against
+        // AbstractCodeEditorService.openCodeEditor, which just tries
+        // registered handlers in order). Returning `false` here for a
+        // same-file target falls through to Monaco's own default handler
+        // (StandaloneCodeEditorService's built-in one, registered before
+        // ours), which moves the cursor within the current model natively
+        // — no history entry pushed, matching the design spec's decision
+        // 5. Only a genuinely different file goes through navigateTo.
+        if (source.getModel()?.uri.fsPath === resource.fsPath) {
+          return false
+        }
+        const line =
+          selectionOrPosition && 'lineNumber' in selectionOrPosition
+            ? selectionOrPosition.lineNumber
+            : selectionOrPosition && 'startLineNumber' in selectionOrPosition
+              ? selectionOrPosition.startLineNumber
+              : 1
+        navigateTo(resource.fsPath, { kind: 'line', line })
+        return true
+      }
+    })
+    return () => disposable.dispose()
+  }, [navigateTo])
 
   const [searchOpen, setSearchOpen] = useState(false)
 

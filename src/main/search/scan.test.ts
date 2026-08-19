@@ -138,4 +138,24 @@ describe('searchFiles', () => {
     expect(matches).toEqual([])
     expect(truncated).toBe(true)
   })
+
+  it('word mode matches whole words only, not substrings', async () => {
+    await repo.write('a.txt', 'foo foobar barfoo\n')
+    const { matches } = await searchFiles(repo.root, ['a.txt'], 'foo', { mode: 'word' })
+    expect(matches).toHaveLength(1)
+    expect(matches[0]).toMatchObject({ line: 1, column: 0 })
+  })
+
+  it('word mode finds every occurrence on a line, not just the first', async () => {
+    await repo.write('a.txt', 'foo(foo, foo)\n')
+    const { matches } = await searchFiles(repo.root, ['a.txt'], 'foo', { mode: 'word' })
+    expect(matches).toHaveLength(3)
+    expect(matches.map((m) => m.column)).toEqual([0, 4, 9])
+  })
+
+  it('defaults to substring mode when mode is omitted', async () => {
+    await repo.write('a.txt', 'foobar\n')
+    const { matches } = await searchFiles(repo.root, ['a.txt'], 'foo')
+    expect(matches).toHaveLength(1)
+  })
 })
