@@ -1,6 +1,4 @@
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
+import { escapeRegExp } from './scan'
 
 /**
  * A language-agnostic set of "this line imports something named

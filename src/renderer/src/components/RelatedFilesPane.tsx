@@ -19,6 +19,18 @@ function toRelativePath(absPath: string, workspaceRoot: string): string {
   return absPath.startsWith(prefix) ? absPath.slice(prefix.length) : absPath
 }
 
+/** Go has no file-relative import resolution without go.mod (design spec
+ * decision 5) — neither "Imports" nor "Imported by" apply to it. */
+function supportsImportEdges(language: string): boolean {
+  return language !== 'go'
+}
+
+/** Strips a trailing extension, leaving dotfiles like `.env` untouched —
+ * a leading-dot-only name has no non-empty basename left to extract. */
+function stripExtension(fileName: string): string {
+  return fileName.match(/^(.+)\.[^.]+$/)?.[1] ?? fileName
+}
+
 export default function RelatedFilesPane({
   file,
   workspaceRoot,
@@ -55,20 +67,24 @@ export default function RelatedFilesPane({
 
     void (async () => {
       try {
-        // Imported by (reverse) — only needs the basename, independent of
-        // whether the file's own content can be read as text. Skipped
-        // entirely for Go (see design spec decision 5 — no file-relative
-        // import resolution without go.mod).
-        if (!cancelled && currentLanguage !== 'go') {
-          const basename = fileName.replace(/\.[^.]+$/, '')
-          const result = await window.viewmaster.findImportedBy(basename)
+        // Imported by (reverse) and the file's own content are independent
+        // — fire both immediately and await each where it's needed, rather
+        // than serializing an extra IPC round-trip. Skipped entirely for
+        // Go (see design spec decision 5).
+        const importedByPromise = supportsImportEdges(currentLanguage)
+          ? window.viewmaster.findImportedBy(stripExtension(fileName))
+          : null
+
+        const content = await window.viewmaster.readFile(file.absPath)
+
+        if (importedByPromise) {
+          const result = await importedByPromise
           if (result.error) throw new Error(result.error)
           if (!cancelled) {
             setImportedBy(aggregateReferences([result.locations], file.absPath))
           }
         }
 
-        const content = await window.viewmaster.readFile(file.absPath)
         if (cancelled) return
         if (content.kind !== 'text') return
 
@@ -79,7 +95,7 @@ export default function RelatedFilesPane({
         // first-match-wins probe). Only candidates inside the workspace
         // root are kept (design spec decision 6 — no navigation outside
         // the open folder).
-        if (currentLanguage !== 'go') {
+        if (supportsImportEdges(currentLanguage)) {
           const specifiers = extractImportSpecifiersForLanguage(currentLanguage, content.content)
           const resolved = await Promise.all(
             specifiers.map(async (specifier) => {
@@ -159,8 +175,8 @@ export default function RelatedFilesPane({
         <div className="related-files-empty">Error: {error}</div>
       ) : (
         <>
-          {language !== 'go' && renderSection('Imports', imports)}
-          {language !== 'go' && renderSection('Imported by', importedBy)}
+          {supportsImportEdges(language) && renderSection('Imports', imports)}
+          {supportsImportEdges(language) && renderSection('Imported by', importedBy)}
           {renderSection('References', references)}
         </>
       )}

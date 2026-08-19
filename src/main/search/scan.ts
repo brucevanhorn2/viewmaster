@@ -12,7 +12,7 @@ const TIME_BUDGET_MS = 10000
 const PREVIEW_MAX_LENGTH = 200
 const PREVIEW_CONTEXT = 60
 
-function escapeRegExp(s: string): string {
+export function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
