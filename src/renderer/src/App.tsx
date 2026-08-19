@@ -177,13 +177,17 @@ export default function App(): React.JSX.Element {
   const onGoBack = useCallback((): void => setNavState((s) => goBack(s)), [])
   const onGoForward = useCallback((): void => setNavState((s) => goForward(s)), [])
 
-  // Bridges Monaco's "open a different file" request (fired when either
-  // the TypeScript path's real definition/reference results, or the
-  // heuristic path's, point at a file other than the one currently open)
-  // into the app's own navigation history — the same stack Back/Forward
-  // already operate on. A same-file jump never reaches this callback;
-  // Monaco just moves the cursor within the current model instead (see
-  // the design spec's accepted gap).
+  // Bridges Monaco's "open a code editor" request (fired for both the
+  // TypeScript path's and the heuristic path's definition/reference
+  // results) into the app's own navigation history — the same stack
+  // Back/Forward already operate on. Monaco calls this callback for
+  // EVERY such request, same-file jumps included (confirmed against
+  // AbstractCodeEditorService.openCodeEditor's source — it does not skip
+  // registered openers for same-resource targets on its own), so the
+  // same-file short-circuit inside openCodeEditor below is load-bearing,
+  // not defensive: without it every same-file jump would also push a
+  // history entry, contradicting the design spec's decision 5 (task 8's
+  // manual verification caught exactly this before the check was added).
   useEffect(() => {
     const disposable = monaco.editor.registerEditorOpener({
       openCodeEditor(source, resource, selectionOrPosition) {
