@@ -981,7 +981,7 @@ Add a new item to the existing `'Search'` submenu, right after `'Find in Filesâ€
         },
         {
           label: 'Related Filesâ€¦',
-          accelerator: 'CmdOrCtrl+Shift+R',
+          accelerator: 'CmdOrCtrl+Alt+R',
           click: () => sendRelatedFiles()
         }
       ]

@@ -75,7 +75,7 @@ function buildMenu(): void {
         },
         {
           label: 'Related Files…',
-          accelerator: 'CmdOrCtrl+Shift+R',
+          accelerator: 'CmdOrCtrl+Alt+R',
           click: () => sendRelatedFiles()
         }
       ]
