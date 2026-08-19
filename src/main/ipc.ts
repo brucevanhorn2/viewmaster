@@ -28,6 +28,12 @@ interface Session {
   mode: SidebarMode
   watcher: FSWatcher
   recorder: Recorder | null
+  searchPaths: string[] | null
+  // Bumped every time searchPaths is invalidated. A cache-populating listing
+  // in flight when an invalidation happens must not resurrect the cache with
+  // pre-change data once it resolves — comparing the generation it started
+  // with against the current one detects that race (see search:query).
+  searchGeneration: number
 }
 
 let session: Session | null = null
@@ -121,6 +127,8 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
         const fresh = await computeRepoState(watchRoot, currentMode)
         if (session?.root !== watchRoot || session.mode !== currentMode) return // repo switched or mode toggled — drop stale update
         if (fresh.kind === 'repo') session.baseline = fresh.baseline
+        session.searchPaths = null
+        session.searchGeneration++
         // Resolve the window at send time — the window that opened the repo
         // may have been closed and replaced since.
         const win = getWindow()
@@ -136,7 +144,9 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
       // 'changed' default), but only 'repo' sessions actually consult it.
       mode: state.kind === 'repo' ? state.mode : 'browse',
       watcher,
-      recorder
+      recorder,
+      searchPaths: null,
+      searchGeneration: 0
     }
   }
 
@@ -217,11 +227,28 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     if (!activeSession) return { matches: [], truncated: false }
     const controller = new AbortController()
     currentSearchController = controller
+    const startedAt = Date.now()
     try {
-      const paths = activeSession.baseline
-        ? await listGitTree(activeSession.root)
-        : await listFolderTree(activeSession.root)
-      return await searchFiles(activeSession.root, paths, query, { signal: controller.signal })
+      let paths = activeSession.searchPaths
+      if (paths === null) {
+        const generation = activeSession.searchGeneration
+        paths = activeSession.baseline
+          ? await listGitTree(activeSession.root)
+          : await listFolderTree(activeSession.root)
+        // Only cache this listing if nothing invalidated it while we were
+        // awaiting — a file change during the listing means it may already
+        // be stale; leaving searchPaths null lets the next query re-list
+        // instead of resurrecting the cache with pre-change data. This
+        // query still answers with what it has: redoing the listing would
+        // just delay the response the user is already waiting on.
+        if (activeSession.searchGeneration === generation) {
+          activeSession.searchPaths = paths
+        }
+      }
+      return await searchFiles(activeSession.root, paths, query, {
+        signal: controller.signal,
+        startedAt
+      })
     } catch (err) {
       return { matches: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
     }

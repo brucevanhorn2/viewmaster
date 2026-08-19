@@ -129,4 +129,13 @@ describe('searchFiles', () => {
     // abort fires — at most CONCURRENCY of them — can still complete).
     expect(matches.length).toBeLessThan(200)
   })
+
+  it('honors a startedAt that is already past the time budget', async () => {
+    await repo.write('a.txt', 'needle\n')
+    const { matches, truncated } = await searchFiles(repo.root, ['a.txt'], 'needle', {
+      startedAt: Date.now() - 11_000
+    })
+    expect(matches).toEqual([])
+    expect(truncated).toBe(true)
+  })
 })

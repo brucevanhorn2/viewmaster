@@ -14,6 +14,7 @@ const PREVIEW_CONTEXT = 60
 
 export interface SearchScanOptions {
   signal?: AbortSignal
+  startedAt?: number
 }
 
 export interface SearchScanResult {
@@ -149,7 +150,7 @@ export async function searchFiles(
   const needle = query.toLowerCase()
   const matches: SearchMatch[] = []
   let truncated = false
-  const startedAt = Date.now()
+  const startedAt = options.startedAt ?? Date.now()
   const signal = options.signal
 
   await runWithConcurrency(paths, CONCURRENCY, async (relPath) => {
