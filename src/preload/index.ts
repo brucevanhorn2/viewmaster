@@ -25,6 +25,9 @@ const api = {
   copyPath: (absPath: string): void => {
     void ipcRenderer.invoke('app:copyPath', absPath)
   },
+  showInFolder: (absPath: string): void => {
+    void ipcRenderer.invoke('app:showInFolder', absPath)
+  },
   openExternal: (url: string): void => {
     void ipcRenderer.invoke('app:openExternal', url)
   },
