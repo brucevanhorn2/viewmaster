@@ -167,9 +167,10 @@ renders the three sections (Imports / Imported by / References) for the
 currently selected file, lazily (decision 3) — only does any work while
 `open` is true, matching `SearchPane`'s own `open` prop convention. Each
 row navigates via the existing `navigateTo`, consistent with every other
-click-to-navigate surface in the app. Per decision 5, the "Imported by"
-section is skipped entirely (not fetched, not rendered as an empty
-loading state) when the selected file's language is Go.
+click-to-navigate surface in the app. Per decision 5, both the "Imports"
+and "Imported by" sections are skipped entirely (not fetched, not
+rendered as an empty state) when the selected file's language is Go —
+only "References" is shown.
 
 `src/renderer/src/App.tsx`: one new pane wired into the left-column
 `Allotment`, following the exact `SearchPane` wiring pattern (state,
