@@ -2,11 +2,12 @@
   <img src="img/viewmaster.png" alt="View Master" width="320">
 </p>
 
-A read-only desktop viewer for **markdown documents** and **branch diffs**.
+A read-only desktop viewer for **markdown documents**, **images and PDFs**, and
+**branch diffs**.
 
-Built to replace reaching for a full IDE just to read a rendered markdown file or
-eyeball what changed on a branch. View Master does two things, and only ever
-*views* — it never edits your files.
+Built to replace reaching for a full IDE just to read a rendered markdown file,
+preview an image or PDF, or eyeball what changed on a branch. View Master only
+ever *views* — it never edits your files.
 
 ## Features
 
@@ -14,7 +15,16 @@ eyeball what changed on a branch. View Master does two things, and only ever
 - Renders markdown beautifully — no raw source.
 - Renders embedded **mermaid** diagrams.
 - Syntax-highlighted code fences.
-- Hyperlinks open in your **default browser**.
+- **Links between markdown documents navigate in-app** — a relative link
+  jumps to the linked file, and a `#heading` link scrolls to that heading
+  (in the current document, or after navigating to another one). External
+  `http(s)` links still open in your default browser.
+
+### Image & PDF viewing
+- Click an **image** file (PNG, JPEG, GIF, WEBP, SVG) → rendered preview.
+  SVG gets a **Rendered | Code** toggle to see the raw markup.
+- Click a **PDF** → rendered pages via a canvas-based viewer, with
+  Prev/Next navigation for multi-page documents.
 
 ### Branch diff viewing
 - Left sidebar shows **only the files changed within the current branch** —
@@ -44,7 +54,8 @@ introduced — not just what happens to differ from the tip of `main`.
 ## Tech stack
 
 Electron + TypeScript + React, with Monaco (code + diffs), markdown-it + mermaid +
-shiki (rendered markdown), and Allotment (resizable panes). Dark mode only.
+shiki (rendered markdown), pdf.js (PDF rendering), and Allotment (resizable panes).
+Dark mode only.
 
 ## Development
 
@@ -77,10 +88,16 @@ This is a one-time step per machine. Signing and notarization are on the roadmap
 
 ## Roadmap
 
-- Side-by-side rendered old-vs-new markdown as an alternate diff mode.
-- Code signing + notarization for Gatekeeper-clean, distributable DMGs.
-- Search / filter within the changed-file list.
-- Configurable baseline (compare against an arbitrary branch or ref).
+- Side-by-side rendered old-vs-new markdown as an alternate diff mode
+  ([#11](https://github.com/brucevanhorn2/viewmaster/issues/11)).
+- Code signing + notarization for Gatekeeper-clean, distributable DMGs
+  ([#12](https://github.com/brucevanhorn2/viewmaster/issues/12)).
+- Full-text search across the open folder's documents
+  ([#6](https://github.com/brucevanhorn2/viewmaster/issues/6)).
+- Configurable baseline (compare against an arbitrary branch or ref)
+  ([#13](https://github.com/brucevanhorn2/viewmaster/issues/13)).
+- Find usages / jump to definition for code symbols, IDE-style
+  ([#7](https://github.com/brucevanhorn2/viewmaster/issues/7)).
 
 ## Status
 
