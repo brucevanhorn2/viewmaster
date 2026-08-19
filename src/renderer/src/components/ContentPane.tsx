@@ -168,7 +168,7 @@ export default function ContentPane({
   } else if (content.kind === 'pdf') {
     body = <PdfView base64={content.base64} />
   } else if (isSvg(file.path) && mode === 'code') {
-    body = <CodeView fileName={fileName} content={content.content} />
+    body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} />
   } else if (isSvg(file.path)) {
     body = <ImageView src={svgDataUrl(content.content)} />
   } else if (mode === 'diff') {
@@ -199,7 +199,7 @@ export default function ContentPane({
         />
       )
   } else if (mode === 'code' && isMarkdown(file.path)) {
-    body = <CodeView fileName={fileName} content={content.content} revealLine={lineTarget} />
+    body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} revealLine={lineTarget} />
   } else if (isMarkdown(file.path)) {
     body = (
       <MarkdownView
@@ -212,7 +212,7 @@ export default function ContentPane({
       />
     )
   } else {
-    body = <CodeView fileName={fileName} content={content.content} revealLine={lineTarget} />
+    body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} revealLine={lineTarget} />
   }
 
   const showToolbarToggles = content?.kind === 'text'

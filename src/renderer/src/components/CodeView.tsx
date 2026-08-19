@@ -6,10 +6,12 @@ import { languageForFile } from '../monacoSetup'
 
 export default function CodeView({
   fileName,
+  absPath,
   content,
   revealLine
 }: {
   fileName: string
+  absPath: string
   content: string
   revealLine?: number
 }): React.JSX.Element {
@@ -44,6 +46,8 @@ export default function CodeView({
       height="100%"
       theme="vs-dark"
       language={languageForFile(fileName)}
+      path={absPath}
+      keepCurrentModel={true}
       value={content}
       onMount={setEditorInstance}
       options={{
