@@ -115,9 +115,15 @@ process management). This spec deliberately does not build that.
 `src/main/search/scan.ts`:
 - `searchFiles`/`scanOneFile` gain a `mode: 'substring' | 'word'` option
   (default `'substring'`, preserving Find in Files' exact existing
-  behavior). In `'word'` mode, matching uses a word-boundary regex
-  (`\b<escaped query>\b`, case-insensitive) and collects every match on a
-  line, not just the first.
+  behavior) and a `caseSensitive?: boolean` option (default `false`,
+  again preserving Find in Files' exact existing behavior). In `'word'`
+  mode, matching uses a word-boundary regex (`\b<escaped query>\b`) and
+  collects every match on a line, not just the first. `symbol:definitions`/
+  `symbol:references` pass `caseSensitive: true`, since identifiers are
+  case-sensitive in every language this feature targets (Go's exported
+  `Count` vs. unexported `count` being the clearest example) — Find in
+  Files itself never sets this option, so its case-insensitive substring
+  search is untouched.
 - New `src/main/search/definitionHeuristics.ts`: exports
   `looksLikeDefinition(line: string, word: string): boolean`, testing a
   line against the shared pattern list from decision 7.
