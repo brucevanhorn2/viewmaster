@@ -12,9 +12,14 @@ const TIME_BUDGET_MS = 10000
 const PREVIEW_MAX_LENGTH = 200
 const PREVIEW_CONTEXT = 60
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 export interface SearchScanOptions {
   signal?: AbortSignal
   startedAt?: number
+  mode?: 'substring' | 'word'
 }
 
 export interface SearchScanResult {
@@ -58,7 +63,8 @@ async function scanOneFile(
   absPath: string,
   relPath: string,
   needle: string,
-  maxMatches: number
+  maxMatches: number,
+  mode: 'substring' | 'word'
 ): Promise<{ matches: SearchMatch[]; capped: boolean }> {
   if (maxMatches <= 0) return { matches: [], capped: false }
 
@@ -79,6 +85,7 @@ async function scanOneFile(
 
   const results: SearchMatch[] = []
   let capped = false
+  const wordPattern = mode === 'word' ? new RegExp(`\\b${escapeRegExp(needle)}\\b`, 'gi') : null
   const stream = createReadStream(absPath, { encoding: 'utf8' })
   const rl = createInterface({
     input: stream,
@@ -87,15 +94,35 @@ async function scanOneFile(
   let lineNumber = 0
   try {
     try {
-      for await (const line of rl) {
+      outer: for await (const line of rl) {
         lineNumber++
-        const column = line.toLowerCase().indexOf(needle)
-        if (column === -1) continue
-        const { preview, previewColumn } = extractPreview(line, column)
-        results.push({ path: relPath, absPath, line: lineNumber, column, preview, previewColumn })
-        if (results.length >= maxMatches) {
-          capped = true
-          break
+        if (wordPattern) {
+          wordPattern.lastIndex = 0
+          let match: RegExpExecArray | null
+          while ((match = wordPattern.exec(line)) !== null) {
+            const { preview, previewColumn } = extractPreview(line, match.index)
+            results.push({
+              path: relPath,
+              absPath,
+              line: lineNumber,
+              column: match.index,
+              preview,
+              previewColumn
+            })
+            if (results.length >= maxMatches) {
+              capped = true
+              break outer
+            }
+          }
+        } else {
+          const column = line.toLowerCase().indexOf(needle)
+          if (column === -1) continue
+          const { preview, previewColumn } = extractPreview(line, column)
+          results.push({ path: relPath, absPath, line: lineNumber, column, preview, previewColumn })
+          if (results.length >= maxMatches) {
+            capped = true
+            break outer
+          }
         }
       }
     } catch {
@@ -148,6 +175,7 @@ export async function searchFiles(
 ): Promise<SearchScanResult> {
   if (query.trim() === '') return { matches: [], truncated: false }
   const needle = query.toLowerCase()
+  const mode = options.mode ?? 'substring'
   const matches: SearchMatch[] = []
   let truncated = false
   const startedAt = options.startedAt ?? Date.now()
@@ -165,7 +193,7 @@ export async function searchFiles(
     }
     const perFileCap = Math.min(MAX_MATCHES_PER_FILE, MAX_MATCHES_TOTAL - matches.length)
     const absPath = join(root, relPath)
-    const { matches: fileMatches, capped } = await scanOneFile(absPath, relPath, needle, perFileCap)
+    const { matches: fileMatches, capped } = await scanOneFile(absPath, relPath, needle, perFileCap, mode)
     matches.push(...fileMatches)
     if (capped) truncated = true
   })
