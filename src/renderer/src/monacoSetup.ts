@@ -32,6 +32,29 @@ self.MonacoEnvironment = {
 // Use the bundled monaco, never a CDN — the app must work offline.
 loader.config({ monaco })
 
+// Shift+F12 is Monaco's default binding for `editor.action.goToReferences`
+// ("Go to References"), a *different* action from `referenceSearch.trigger`
+// ("Peek References") — confirmed via task 8's manual verification that
+// `goToReferences` itself is broken in this bundled monaco-editor version
+// (silently no-ops: no peek, no cursor move, no error, even with
+// console/window-error capture installed), while `referenceSearch.trigger`
+// works correctly and is reachable via the editor's own right-click menu.
+// Rebinding the chord to the working action directly, rather than waiting
+// on an upstream fix, restores the feature's own promised keyboard path
+// ("Shift+F12 find usages"). The `when` clause reproduces exactly what
+// `goToReferences`' own native keybinding rule evaluates to — Monaco's
+// `registerAction2` ANDs a command's `precondition` with its
+// `keybinding.when` (see `vs/platform/actions/common/actions.js`), and for
+// `GoToReferencesAction` that's `editorHasReferenceProvider &&
+// !inReferenceSearchEditor && !isInEmbeddedEditor` (the precondition) AND
+// `editorTextFocus` (the keybinding's own when) — so this only fires where
+// the native chord would have, not more broadly.
+monaco.editor.addKeybindingRule({
+  keybinding: monaco.KeyMod.Shift | monaco.KeyCode.F12,
+  command: 'editor.action.referenceSearch.trigger',
+  when: 'editorTextFocus && editorHasReferenceProvider && !inReferenceSearchEditor && !isInEmbeddedEditor'
+})
+
 /** Map a file name to a Monaco language id via the registered languages. */
 export function languageForFile(fileName: string): string {
   const dot = fileName.lastIndexOf('.')
