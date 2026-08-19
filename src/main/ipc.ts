@@ -230,6 +230,10 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     clipboard.writeText(absPath)
   })
 
+  ipcMain.handle('app:showInFolder', (_e, absPath: string): void => {
+    shell.showItemInFolder(absPath)
+  })
+
   ipcMain.handle('app:openExternal', (_e, url: string): void => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)
   })
