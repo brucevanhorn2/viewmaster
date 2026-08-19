@@ -3,10 +3,10 @@ import { extname } from 'path'
 import type { FileContent } from '@shared/types'
 import { runGit } from './run'
 
-const MAX_SIZE = 2 * 1024 * 1024
+export const MAX_SIZE = 2 * 1024 * 1024
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024
 const MAX_PDF_SIZE = 25 * 1024 * 1024
-const BINARY_SNIFF_BYTES = 8192
+export const BINARY_SNIFF_BYTES = 8192
 
 const RASTER_IMAGE_MIME: Record<string, string> = {
   '.png': 'image/png',

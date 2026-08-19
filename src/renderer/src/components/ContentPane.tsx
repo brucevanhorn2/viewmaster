@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ChangedFile, FileContent, HistoryVersion } from '@shared/types'
 import { isDefaultSelection, type RevisionRef, type Selection } from '../history/selection'
+import type { NavigationTarget } from '../navigation/history'
 import CodeView from './CodeView'
 import DiffView from './DiffView'
 import MarkdownView from './MarkdownView'
@@ -31,17 +32,25 @@ export default function ContentPane({
   versions,
   workspaceRoot,
   onNavigate,
-  scrollToAnchor,
-  onAnchorConsumed
+  navigationTarget,
+  onTargetConsumed,
+  canGoBack,
+  canGoForward,
+  onGoBack,
+  onGoForward
 }: {
   file: ChangedFile | null
   refreshKey: number
   selection: Selection
   versions: HistoryVersion[]
   workspaceRoot: string
-  onNavigate: (absPath: string, anchor?: string) => void
-  scrollToAnchor: string | null
-  onAnchorConsumed: () => void
+  onNavigate: (absPath: string, target?: NavigationTarget) => void
+  navigationTarget: NavigationTarget | null
+  onTargetConsumed: () => void
+  canGoBack: boolean
+  canGoForward: boolean
+  onGoBack: () => void
+  onGoForward: () => void
 }): React.JSX.Element {
   const [mode, setMode] = useState<Mode>('view')
   const [sideBySide, setSideBySide] = useState(true)
@@ -49,10 +58,30 @@ export default function ContentPane({
   const [baseContent, setBaseContent] = useState<string | null>(null)
   const [compareContent, setCompareContent] = useState<string | null>(null)
 
-  // Reset to rendered/view mode when switching files.
+  // Reset to rendered/view mode whenever a different file is selected.
   useEffect(() => {
     setMode('view')
   }, [file?.path])
+
+  // A line-targeted navigation into a markdown file needs the raw-text
+  // 'code' mode to be meaningful (a rendered-HTML view has no line-number
+  // mapping) -- force it once, when the target first arrives. Unlike
+  // anchor-kind targets, a line-kind target is deliberately never consumed
+  // (there's no onTargetConsumed call for it): CodeView's highlight
+  // decoration depends on revealLine staying present as a prop, so clearing
+  // it would erase the highlight right after showing it. That means the
+  // user's own subsequent mode choice is only respected for the rest of the
+  // *current* visit to this history entry -- if they navigate away and
+  // later come back to the same entry via Back/Forward, file?.path changes
+  // (or this effect re-fires) and the still-present line target re-forces
+  // 'code' mode, overriding whatever mode they'd left it in. That's
+  // intentional: revisiting a search-jump entry should re-show the
+  // highlighted line, the same as re-clicking the search result.
+  useEffect(() => {
+    if (file && isMarkdown(file.path) && navigationTarget?.kind === 'line') {
+      setMode('code')
+    }
+  }, [file?.path, navigationTarget])
 
   // A non-default revision selection means "show a diff"; jump into diff mode.
   useEffect(() => {
@@ -109,6 +138,16 @@ export default function ContentPane({
   }
 
   const fileName = file.path.split('/').pop() ?? file.path
+  const lineTarget = navigationTarget?.kind === 'line' ? navigationTarget.line : undefined
+  const anchorTarget = navigationTarget?.kind === 'anchor' ? navigationTarget.id : null
+
+  // MarkdownView's onNavigate prop is unchanged from issue #5 -- a bare
+  // optional anchor string, not a NavigationTarget. This adapts the real
+  // (generalized) onNavigate to that shape at the boundary, since
+  // MarkdownView itself doesn't change in this plan.
+  const onMarkdownNavigate = (absPath: string, anchor?: string): void => {
+    onNavigate(absPath, anchor ? { kind: 'anchor', id: anchor } : undefined)
+  }
 
   let body: React.JSX.Element
   if (!content) {
@@ -129,7 +168,7 @@ export default function ContentPane({
   } else if (content.kind === 'pdf') {
     body = <PdfView base64={content.base64} />
   } else if (isSvg(file.path) && mode === 'code') {
-    body = <CodeView fileName={fileName} content={content.content} />
+    body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} />
   } else if (isSvg(file.path)) {
     body = <ImageView src={svgDataUrl(content.content)} />
   } else if (mode === 'diff') {
@@ -154,24 +193,26 @@ export default function ContentPane({
           baseContent={baseContent}
           absPath={file.absPath}
           workspaceRoot={workspaceRoot}
-          onNavigate={onNavigate}
-          scrollToAnchor={scrollToAnchor}
-          onAnchorConsumed={onAnchorConsumed}
+          onNavigate={onMarkdownNavigate}
+          scrollToAnchor={anchorTarget}
+          onAnchorConsumed={onTargetConsumed}
         />
       )
+  } else if (mode === 'code' && isMarkdown(file.path)) {
+    body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} revealLine={lineTarget} />
   } else if (isMarkdown(file.path)) {
     body = (
       <MarkdownView
         content={content.content}
         absPath={file.absPath}
         workspaceRoot={workspaceRoot}
-        onNavigate={onNavigate}
-        scrollToAnchor={scrollToAnchor}
-        onAnchorConsumed={onAnchorConsumed}
+        onNavigate={onMarkdownNavigate}
+        scrollToAnchor={anchorTarget}
+        onAnchorConsumed={onTargetConsumed}
       />
     )
   } else {
-    body = <CodeView fileName={fileName} content={content.content} />
+    body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} revealLine={lineTarget} />
   }
 
   const showToolbarToggles = content?.kind === 'text'
@@ -179,6 +220,19 @@ export default function ContentPane({
   return (
     <div className="content-pane">
       <div className="toolbar">
+        <span className="toolbar-nav">
+          <button className="toolbar-button" onClick={onGoBack} disabled={!canGoBack} title="Back">
+            ←
+          </button>
+          <button
+            className="toolbar-button"
+            onClick={onGoForward}
+            disabled={!canGoForward}
+            title="Forward"
+          >
+            →
+          </button>
+        </span>
         <span className="toolbar-path" title={file.absPath}>
           {file.path}
         </span>
