@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
+import * as monaco from 'monaco-editor'
 import '../monacoSetup'
 import { languageForFile } from '../monacoSetup'
+import { extractImportSpecifiers, candidateImportPaths } from '../code/resolveImports'
 
 export default function CodeView({
   fileName,
@@ -40,6 +42,38 @@ export default function CodeView({
       decorationsRef.current.clear()
     }
   }, [editorInstance, revealLine, content])
+
+  // Incrementally makes Monaco's TypeScript language service aware of
+  // this file's direct local imports (one level, not recursive — see the
+  // design spec), so cross-file "go to definition"/"find usages" can
+  // follow an import you haven't opened yet. Bare (node_modules-style)
+  // specifiers are skipped entirely — there is no node_modules
+  // type-awareness here.
+  useEffect(() => {
+    if (languageForFile(fileName) !== 'typescript') return
+    let cancelled = false
+    const lastSlash = absPath.lastIndexOf('/')
+    const fromDir = lastSlash === -1 ? absPath : absPath.slice(0, lastSlash)
+    const specifiers = extractImportSpecifiers(content)
+    void Promise.all(
+      specifiers.map(async (specifier) => {
+        for (const candidate of candidateImportPaths(fromDir, specifier)) {
+          if (cancelled) return
+          const uri = monaco.Uri.file(candidate)
+          if (monaco.editor.getModel(uri)) return
+          const result = await window.viewmaster.readFile(candidate)
+          if (cancelled || result.kind !== 'text') continue
+          if (!monaco.editor.getModel(uri)) {
+            monaco.editor.createModel(result.content, 'typescript', uri)
+          }
+          return
+        }
+      })
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [fileName, absPath, content])
 
   return (
     <Editor
