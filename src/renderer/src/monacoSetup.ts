@@ -1,5 +1,6 @@
 import * as monaco from 'monaco-editor'
 import { loader } from '@monaco-editor/react'
+import type { SymbolLocation } from '@shared/types'
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
@@ -42,3 +43,53 @@ export function languageForFile(fileName: string): string {
   }
   return 'plaintext'
 }
+
+const HEURISTIC_EXCLUDED_LANGUAGE_IDS = new Set(['typescript', 'javascript'])
+
+function toMonacoLocations(locations: SymbolLocation[]): monaco.languages.Location[] {
+  return locations.map((loc) => ({
+    uri: monaco.Uri.file(loc.absPath),
+    range: {
+      startLineNumber: loc.line,
+      startColumn: loc.column + 1,
+      endLineNumber: loc.line,
+      endColumn: loc.column + 1
+    }
+  }))
+}
+
+function wordUnderCursor(
+  model: monaco.editor.ITextModel,
+  position: monaco.Position
+): string | null {
+  return model.getWordAtPosition(position)?.word ?? null
+}
+
+// TypeScript/JavaScript already get real, type-aware definition/reference
+// providers from Monaco's bundled TS language service the moment a
+// .ts/.tsx file is opened — registering a second, heuristic provider for
+// those language ids would have both queried and merged, polluting real
+// results with heuristic noise. Every other language id gets the
+// heuristic path (see the design spec's decision 8).
+const heuristicLanguageIds = monaco.languages
+  .getLanguages()
+  .map((lang) => lang.id)
+  .filter((id) => !HEURISTIC_EXCLUDED_LANGUAGE_IDS.has(id))
+
+monaco.languages.registerDefinitionProvider(heuristicLanguageIds, {
+  async provideDefinition(model, position) {
+    const word = wordUnderCursor(model, position)
+    if (!word) return []
+    const { locations } = await window.viewmaster.findDefinitions(word)
+    return toMonacoLocations(locations)
+  }
+})
+
+monaco.languages.registerReferenceProvider(heuristicLanguageIds, {
+  async provideReferences(model, position) {
+    const word = wordUnderCursor(model, position)
+    if (!word) return []
+    const { locations } = await window.viewmaster.findReferences(word)
+    return toMonacoLocations(locations)
+  }
+})
