@@ -7,6 +7,7 @@ import Sidebar from './components/Sidebar'
 import ContentPane from './components/ContentPane'
 import HistoryPane from './components/HistoryPane'
 import SearchPane from './components/SearchPane'
+import RelatedFilesPane from './components/RelatedFilesPane'
 import {
   defaultSelection,
   singleClickSelection,
@@ -218,8 +219,10 @@ export default function App(): React.JSX.Element {
   }, [navigateTo])
 
   const [searchOpen, setSearchOpen] = useState(false)
+  const [relatedFilesOpen, setRelatedFilesOpen] = useState(false)
 
   useEffect(() => window.viewmaster.onMenuFindInFiles(() => setSearchOpen(true)), [])
+  useEffect(() => window.viewmaster.onMenuRelatedFiles(() => setRelatedFilesOpen(true)), [])
   useEffect(() => window.viewmaster.onMenuGoBack(onGoBack), [onGoBack])
   useEffect(() => window.viewmaster.onMenuGoForward(onGoForward), [onGoForward])
 
@@ -231,6 +234,7 @@ export default function App(): React.JSX.Element {
   )
 
   const onCloseSearch = useCallback((): void => setSearchOpen(false), [])
+  const onCloseRelatedFiles = useCallback((): void => setRelatedFilesOpen(false), [])
 
   const navigationTarget = currentEntry(navState)?.target ?? null
 
@@ -284,6 +288,16 @@ export default function App(): React.JSX.Element {
                 open={searchOpen}
                 onSelectMatch={onSelectMatch}
                 onClose={onCloseSearch}
+              />
+            </Allotment.Pane>
+            <Allotment.Pane visible={relatedFilesOpen} preferredSize={240} minSize={120}>
+              <RelatedFilesPane
+                key={repo?.root ?? 'none'}
+                file={selected}
+                workspaceRoot={repo?.root ?? ''}
+                open={relatedFilesOpen}
+                onNavigate={navigateTo}
+                onClose={onCloseRelatedFiles}
               />
             </Allotment.Pane>
           </Allotment>

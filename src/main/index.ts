@@ -22,6 +22,10 @@ function sendFindInFiles(): void {
   getMainWindow()?.webContents.send('menu:findInFiles')
 }
 
+function sendRelatedFiles(): void {
+  getMainWindow()?.webContents.send('menu:relatedFiles')
+}
+
 function sendGoBack(): void {
   getMainWindow()?.webContents.send('menu:goBack')
 }
@@ -68,6 +72,11 @@ function buildMenu(): void {
           label: 'Find in Files…',
           accelerator: 'CmdOrCtrl+Shift+F',
           click: () => sendFindInFiles()
+        },
+        {
+          label: 'Related Files…',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: () => sendRelatedFiles()
         }
       ]
     },
