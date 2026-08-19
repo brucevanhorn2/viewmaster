@@ -1,6 +1,15 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import type { FSWatcher } from 'fs'
-import type { BaselineKind, FileContent, HistoryVersion, RepoState, SidebarMode } from '@shared/types'
+import type {
+  BaselineKind,
+  FileContent,
+  HistoryVersion,
+  RepoState,
+  SearchResult,
+  SidebarMode,
+  SymbolLocation,
+  SymbolLocationsResult
+} from '@shared/types'
 import { runGit } from './git/run'
 import { resolveBaseline } from './git/baseline'
 import { collectChanges } from './git/changes'
@@ -10,8 +19,10 @@ import { addRecentFolder, getFolderMode, getRecentFolders, setFolderMode } from 
 import { createRecorder, type Recorder } from './history/recorder'
 import { historyPaths } from './history/paths'
 import { getObject, readVersions } from './history/store'
-import { browseFiles, listFolderTree, toUnchangedFiles } from './files/browse'
+import { browseFiles, listFolderTree, listGitTree, toUnchangedFiles } from './files/browse'
 import { readResource, resolveWithinRoot } from './files/resource'
+import { searchFiles } from './search/scan'
+import { looksLikeDefinition } from './search/definitionHeuristics'
 
 const RECOMPUTE_DEBOUNCE_MS = 300
 
@@ -21,11 +32,46 @@ interface Session {
   mode: SidebarMode
   watcher: FSWatcher
   recorder: Recorder | null
+  searchPaths: string[] | null
+  // Bumped every time searchPaths is invalidated. A cache-populating listing
+  // in flight when an invalidation happens must not resurrect the cache with
+  // pre-change data once it resolves — comparing the generation it started
+  // with against the current one detects that race (see search:query).
+  searchGeneration: number
 }
 
 let session: Session | null = null
+let currentSearchController: AbortController | null = null
+let currentDefinitionsController: AbortController | null = null
+let currentReferencesController: AbortController | null = null
+
+/**
+ * Returns the session's cached file listing, populating it if this is the
+ * first search since the last invalidation. Guards against a slow,
+ * now-superseded listing overwriting a fresher invalidation — see
+ * `searchGeneration` on `Session`. Shared by `search:query` and the
+ * `symbol:definitions`/`symbol:references` handlers below, which all
+ * search the same underlying listing.
+ */
+async function getSearchPaths(activeSession: Session): Promise<string[]> {
+  if (activeSession.searchPaths !== null) return activeSession.searchPaths
+  const generation = activeSession.searchGeneration
+  const paths = activeSession.baseline
+    ? await listGitTree(activeSession.root)
+    : await listFolderTree(activeSession.root)
+  if (activeSession.searchGeneration === generation) {
+    activeSession.searchPaths = paths
+  }
+  return paths
+}
 
 async function closeSession(): Promise<void> {
+  currentSearchController?.abort()
+  currentSearchController = null
+  currentDefinitionsController?.abort()
+  currentDefinitionsController = null
+  currentReferencesController?.abort()
+  currentReferencesController = null
   if (session) {
     await session.watcher.close()
     if (session.recorder) await session.recorder.close()
@@ -111,6 +157,8 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
         const fresh = await computeRepoState(watchRoot, currentMode)
         if (session?.root !== watchRoot || session.mode !== currentMode) return // repo switched or mode toggled — drop stale update
         if (fresh.kind === 'repo') session.baseline = fresh.baseline
+        session.searchPaths = null
+        session.searchGeneration++
         // Resolve the window at send time — the window that opened the repo
         // may have been closed and replaced since.
         const win = getWindow()
@@ -126,7 +174,9 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
       // 'changed' default), but only 'repo' sessions actually consult it.
       mode: state.kind === 'repo' ? state.mode : 'browse',
       watcher,
-      recorder
+      recorder,
+      searchPaths: null,
+      searchGeneration: 0
     }
   }
 
@@ -186,6 +236,10 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     clipboard.writeText(absPath)
   })
 
+  ipcMain.handle('app:showInFolder', (_e, absPath: string): void => {
+    shell.showItemInFolder(absPath)
+  })
+
   ipcMain.handle('app:openExternal', (_e, url: string): void => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)
   })
@@ -212,6 +266,87 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
       return ''
     }
   })
+
+  ipcMain.handle('search:query', async (_e, query: string): Promise<SearchResult> => {
+    currentSearchController?.abort()
+    const activeSession = session
+    if (!activeSession) return { matches: [], truncated: false }
+    const controller = new AbortController()
+    currentSearchController = controller
+    const startedAt = Date.now()
+    try {
+      const paths = await getSearchPaths(activeSession)
+      return await searchFiles(activeSession.root, paths, query, {
+        signal: controller.signal,
+        startedAt
+      })
+    } catch (err) {
+      return { matches: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle(
+    'symbol:definitions',
+    async (_e, word: string): Promise<SymbolLocationsResult> => {
+      currentDefinitionsController?.abort()
+      const activeSession = session
+      if (!activeSession) return { locations: [] }
+      const controller = new AbortController()
+      currentDefinitionsController = controller
+      const startedAt = Date.now()
+      try {
+        const paths = await getSearchPaths(activeSession)
+        const { matches } = await searchFiles(activeSession.root, paths, word, {
+          signal: controller.signal,
+          startedAt,
+          mode: 'word',
+          caseSensitive: true,
+          lineFilter: (line) => looksLikeDefinition(line, word)
+        })
+        const seen = new Set<string>()
+        const locations: SymbolLocation[] = []
+        for (const m of matches) {
+          const key = `${m.absPath}:${m.line}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          locations.push({ path: m.path, absPath: m.absPath, line: m.line, column: m.column })
+        }
+        return { locations }
+      } catch (err) {
+        return { locations: [], error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'symbol:references',
+    async (_e, word: string): Promise<SymbolLocationsResult> => {
+      currentReferencesController?.abort()
+      const activeSession = session
+      if (!activeSession) return { locations: [] }
+      const controller = new AbortController()
+      currentReferencesController = controller
+      const startedAt = Date.now()
+      try {
+        const paths = await getSearchPaths(activeSession)
+        const { matches } = await searchFiles(activeSession.root, paths, word, {
+          signal: controller.signal,
+          startedAt,
+          mode: 'word',
+          caseSensitive: true
+        })
+        const locations: SymbolLocation[] = matches.map((m) => ({
+          path: m.path,
+          absPath: m.absPath,
+          line: m.line,
+          column: m.column
+        }))
+        return { locations }
+      } catch (err) {
+        return { locations: [], error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
 }
 
 export async function disposeIpc(): Promise<void> {

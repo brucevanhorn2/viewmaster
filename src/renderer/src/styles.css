@@ -325,6 +325,12 @@ body {
   flex-shrink: 0;
 }
 
+.toolbar-nav {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .toolbar-button {
   background: transparent;
   color: var(--fg);
@@ -370,6 +376,42 @@ body {
   word-break: break-all;
   max-width: 80%;
   text-align: center;
+}
+
+/* ---- pdf preview ---- */
+
+.pdf-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-view-scroll {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+}
+
+.pdf-view-scroll canvas {
+  height: fit-content;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.pdf-view-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.pdf-view-page-count {
+  color: var(--fg-dim);
+  font-size: 12px;
 }
 
 /* ---- rendered markdown ---- */
@@ -581,6 +623,22 @@ body {
   border-radius: 0 3px 3px 0;
 }
 
+/* ---- image preview ---- */
+
+.image-view {
+  height: 100%;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-view img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
 /* ---- history pane ---- */
 
 .history-pane {
@@ -636,4 +694,111 @@ body {
 .history-row.sel-base .history-dot,
 .history-row.sel-compare .history-dot {
   background: #4da3ff;
+}
+
+/* ---- code view line highlight ---- */
+
+.code-view-highlight-line {
+  background: rgba(77, 163, 255, 0.15);
+}
+
+/* ---- search pane ---- */
+
+.search-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+  background: var(--bg);
+  border-top: 1px solid #333;
+}
+.search-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+}
+.search-close {
+  background: transparent;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.search-close:hover {
+  color: var(--fg);
+}
+.search-input {
+  margin: 0 10px 6px;
+  padding: 4px 8px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  font-size: 12px;
+}
+.search-empty {
+  padding: 8px 10px;
+  color: #777;
+  font-size: 12px;
+}
+.search-error {
+  padding: 8px 10px;
+  color: #f48771;
+  font-size: 12px;
+}
+.search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.search-result-file {
+  margin: 0;
+}
+.search-result-file-name {
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-result-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.search-result-row {
+  display: flex;
+  gap: 8px;
+  padding: 2px 10px 2px 20px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-result-row:hover {
+  background: var(--bg-hover);
+}
+.search-result-line-number {
+  color: #666;
+  flex: none;
+}
+.search-result-preview mark {
+  background: var(--accent);
+  color: #ffffff;
+}
+.search-truncated {
+  padding: 8px 10px;
+  color: #d7ba7d;
+  font-size: 11px;
 }

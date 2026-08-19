@@ -1,27 +1,28 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
-import type { ChangedFile, HistoryVersion, RepoState, SidebarMode } from '@shared/types'
+import * as monaco from 'monaco-editor'
+import type { ChangedFile, HistoryVersion, RepoState, SearchMatch, SidebarMode } from '@shared/types'
 import Sidebar from './components/Sidebar'
 import ContentPane from './components/ContentPane'
 import HistoryPane from './components/HistoryPane'
-import { isInsideRoot } from './html/paths'
+import SearchPane from './components/SearchPane'
 import {
   defaultSelection,
   singleClickSelection,
   type RevisionRef,
   type Selection
 } from './history/selection'
-
-/** Re-resolve the selected file's object against a fresh RepoState, keeping the same file selected. */
-function reconcileSelected(
-  state: RepoState,
-  current: ChangedFile | null
-): ChangedFile | null {
-  if (!current) return current
-  if (state.kind !== 'repo' && state.kind !== 'folder') return current
-  return state.files.find((f) => f.path === current.path) ?? current
-}
+import {
+  canGoBack,
+  canGoForward,
+  currentEntry,
+  goBack,
+  goForward,
+  initialNavigationState,
+  pushEntry,
+  type NavigationTarget
+} from './navigation/history'
 
 function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Element {
   const [recents, setRecents] = useState<string[]>([])
@@ -59,7 +60,7 @@ function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Elem
 
 export default function App(): React.JSX.Element {
   const [repo, setRepo] = useState<RepoState | null>(null)
-  const [selected, setSelected] = useState<ChangedFile | null>(null)
+  const [navState, setNavState] = useState(initialNavigationState())
   const [refreshKey, setRefreshKey] = useState(0)
   const [versions, setVersions] = useState<HistoryVersion[]>([])
   const [selection, setSelection] = useState<Selection>(defaultSelection())
@@ -68,7 +69,7 @@ export default function App(): React.JSX.Element {
   const openFolder = useCallback((root: string): void => {
     void window.viewmaster.openRepo(root).then((state) => {
       setRepo(state)
-      setSelected(null)
+      setNavState(initialNavigationState())
     })
   }, [])
 
@@ -76,20 +77,19 @@ export default function App(): React.JSX.Element {
     void window.viewmaster.setMode(mode).then((state) => {
       if (!state) return
       setRepo(state)
-      setSelected((current) => reconcileSelected(state, current))
     })
   }, [])
 
   useEffect(() => window.viewmaster.onMenuOpenFolder(openFolder), [openFolder])
 
-  // Watcher-driven auto-refresh: update the change list in place and make
-  // the open file re-read its contents.
+  // Watcher-driven auto-refresh: update the change list in place. `selected`
+  // is re-derived below from the nav stack + fresh `repo`, so no separate
+  // reconciliation is needed here.
   useEffect(
     () =>
       window.viewmaster.onRepoChanged((state) => {
         setRepo(state)
         setRefreshKey((k) => k + 1)
-        setSelected((current) => reconcileSelected(state, current))
       }),
     []
   )
@@ -99,6 +99,40 @@ export default function App(): React.JSX.Element {
   // repo change or file switch. (Captures write outside the watched repo, so
   // they don't otherwise trigger a refresh.)
   useEffect(() => window.viewmaster.onHistoryChanged(() => setHistoryTick((t) => t + 1)), [])
+
+  /**
+   * Resolves an absPath against the current repo listing, synthesizing an
+   * "unchanged" entry for a target outside it (e.g. a link/search jump to a
+   * file with no git-changed entry in Changed mode) — the same convention
+   * Browse Mode's overlayStatus already uses for untouched files.
+   */
+  const resolveChangedFile = useCallback(
+    (absPath: string): ChangedFile | null => {
+      if (!repo || (repo.kind !== 'repo' && repo.kind !== 'folder')) return null
+      const existing = repo.files.find((f) => f.absPath === absPath)
+      if (existing) return existing
+      const rel = absPath.startsWith(repo.root)
+        ? absPath.slice(repo.root.length).replace(/^\/+/, '')
+        : absPath
+      return { path: rel, absPath, status: 'unchanged' }
+    },
+    [repo]
+  )
+
+  // `selected` always mirrors the nav stack's current entry, re-resolved
+  // against the latest `repo` listing (e.g. after a watcher-driven refresh
+  // changes a file's status). Derived directly during render rather than
+  // via a separate `useState` synced by an effect, so it can never lag
+  // `navigationTarget` (below) by a render tick — both come from the same
+  // `navState` read in the same pass. That lag was real: ContentPane's
+  // mode-forcing effect keys on [file?.path, navigationTarget], so a stale
+  // `file` paired with a fresh `navigationTarget` could transiently force
+  // code-mode against the *previous* file for one render after a search
+  // jump between two markdown files.
+  const selected = useMemo(() => {
+    const entry = currentEntry(navState)
+    return entry ? resolveChangedFile(entry.absPath) : null
+  }, [navState, resolveChangedFile])
 
   // Reset the revision selection whenever the selected file changes.
   useEffect(() => {
@@ -129,24 +163,91 @@ export default function App(): React.JSX.Element {
     [versions]
   )
 
-  const onNavigateToFile = useCallback(
-    (absPath: string): void => {
-      if (!repo || (repo.kind !== 'repo' && repo.kind !== 'folder')) return
-      const existing = repo.files.find((f) => f.absPath === absPath)
-      if (existing) {
-        setSelected(existing)
-        return
-      }
-      // Linked file has no git-changed entry in the current listing (e.g.
-      // Changed mode with an untouched target) — synthesize the same shape
-      // Browse Mode's overlayStatus already gives unchanged files.
-      const rel = isInsideRoot(absPath, repo.root)
-        ? absPath.slice(repo.root.length).replace(/^\/+/, '')
-        : absPath
-      setSelected({ path: rel, absPath, status: 'unchanged' })
+  const navigateTo = useCallback((absPath: string, target?: NavigationTarget): void => {
+    setNavState((s) => pushEntry(s, { absPath, target }))
+  }, [])
+
+  const onSidebarSelect = useCallback(
+    (file: ChangedFile): void => {
+      navigateTo(file.absPath)
     },
-    [repo]
+    [navigateTo]
   )
+
+  const onGoBack = useCallback((): void => setNavState((s) => goBack(s)), [])
+  const onGoForward = useCallback((): void => setNavState((s) => goForward(s)), [])
+
+  // Bridges Monaco's "open a code editor" request (fired for both the
+  // TypeScript path's and the heuristic path's definition/reference
+  // results) into the app's own navigation history — the same stack
+  // Back/Forward already operate on. Monaco calls this callback for
+  // EVERY such request, same-file jumps included (confirmed against
+  // AbstractCodeEditorService.openCodeEditor's source — it does not skip
+  // registered openers for same-resource targets on its own), so the
+  // same-file short-circuit inside openCodeEditor below is load-bearing,
+  // not defensive: without it every same-file jump would also push a
+  // history entry, contradicting the design spec's decision 5 (task 8's
+  // manual verification caught exactly this before the check was added).
+  useEffect(() => {
+    const disposable = monaco.editor.registerEditorOpener({
+      openCodeEditor(source, resource, selectionOrPosition) {
+        // Monaco calls every registered opener for ANY "open a code
+        // editor" request, same-file included — it does not skip this
+        // callback for same-file jumps on its own (verified against
+        // AbstractCodeEditorService.openCodeEditor, which just tries
+        // registered handlers in order). Returning `false` here for a
+        // same-file target falls through to Monaco's own default handler
+        // (StandaloneCodeEditorService's built-in one, registered before
+        // ours), which moves the cursor within the current model natively
+        // — no history entry pushed, matching the design spec's decision
+        // 5. Only a genuinely different file goes through navigateTo.
+        if (source.getModel()?.uri.fsPath === resource.fsPath) {
+          return false
+        }
+        const line =
+          selectionOrPosition && 'lineNumber' in selectionOrPosition
+            ? selectionOrPosition.lineNumber
+            : selectionOrPosition && 'startLineNumber' in selectionOrPosition
+              ? selectionOrPosition.startLineNumber
+              : 1
+        navigateTo(resource.fsPath, { kind: 'line', line })
+        return true
+      }
+    })
+    return () => disposable.dispose()
+  }, [navigateTo])
+
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  useEffect(() => window.viewmaster.onMenuFindInFiles(() => setSearchOpen(true)), [])
+  useEffect(() => window.viewmaster.onMenuGoBack(onGoBack), [onGoBack])
+  useEffect(() => window.viewmaster.onMenuGoForward(onGoForward), [onGoForward])
+
+  const onSelectMatch = useCallback(
+    (match: SearchMatch): void => {
+      navigateTo(match.absPath, { kind: 'line', line: match.line })
+    },
+    [navigateTo]
+  )
+
+  const onCloseSearch = useCallback((): void => setSearchOpen(false), [])
+
+  const navigationTarget = currentEntry(navState)?.target ?? null
+
+  // Marks the current entry's target as handled so a re-render doesn't keep
+  // re-triggering the same scroll/reveal action. Deliberately does not clear
+  // on its own if the user has since navigated elsewhere — by the time a
+  // consumer calls this, it has just acted on the *current* target, so
+  // clearing "whatever entry is current now" is always clearing the right one.
+  const onTargetConsumed = useCallback((): void => {
+    setNavState((s) => {
+      const entry = currentEntry(s)
+      if (!entry?.target) return s
+      const entries = s.entries.slice()
+      entries[s.index] = { absPath: entry.absPath }
+      return { ...s, entries }
+    })
+  }, [])
 
   if (!repo) {
     return (
@@ -165,7 +266,7 @@ export default function App(): React.JSX.Element {
               <Sidebar
                 state={repo}
                 selected={selected?.path ?? null}
-                onSelect={setSelected}
+                onSelect={onSidebarSelect}
                 onSetMode={setMode}
               />
             </Allotment.Pane>
@@ -177,6 +278,14 @@ export default function App(): React.JSX.Element {
                 onSelect={onSelectRevision}
               />
             </Allotment.Pane>
+            <Allotment.Pane visible={searchOpen} preferredSize={240} minSize={120}>
+              <SearchPane
+                key={repo?.root ?? 'none'}
+                open={searchOpen}
+                onSelectMatch={onSelectMatch}
+                onClose={onCloseSearch}
+              />
+            </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>
         <Allotment.Pane>
@@ -186,7 +295,13 @@ export default function App(): React.JSX.Element {
             selection={selection}
             versions={versions}
             workspaceRoot={repo?.root ?? ''}
-            onNavigate={onNavigateToFile}
+            onNavigate={navigateTo}
+            navigationTarget={navigationTarget}
+            onTargetConsumed={onTargetConsumed}
+            canGoBack={canGoBack(navState)}
+            canGoForward={canGoForward(navState)}
+            onGoBack={onGoBack}
+            onGoForward={onGoForward}
           />
         </Allotment.Pane>
       </Allotment>

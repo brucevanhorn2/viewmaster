@@ -1,7 +1,7 @@
 {
   "name": "viewmaster",
   "productName": "View Master",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Read-only desktop viewer for markdown documents and branch diffs",
   "main": "./out/main/index.js",
   "author": "Bruce Van Horn",
@@ -39,6 +39,7 @@
     "mermaid": "^11.16.0",
     "monaco-editor": "^0.55.1",
     "node-htmldiff": "^0.9.4",
+    "pdfjs-dist": "^6.2.108",
     "playwright-core": "^1.62.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
