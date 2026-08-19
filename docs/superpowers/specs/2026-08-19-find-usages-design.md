@@ -43,19 +43,22 @@ process management). This spec deliberately does not build that.
    preload.** Monaco's TS service only knows about files loaded as
    models. Preloading an entire monorepo upfront would repeat the exact
    memory/rebuild-cost mistake #6 was redesigned away from. Instead:
-   opening a `.ts`/`.tsx` file registers it as a persistent, path-keyed
-   Monaco model (see decision 4), and additionally scans its raw text for
+   opening a `.ts`/`.tsx`/`.js`/`.jsx` file registers it as a persistent,
+   path-keyed Monaco model (see decision 4), and additionally scans its
+   raw text for
    `import`/`require`/`export...from` specifiers, resolving the relative
    ones against the file's own directory (trying `.ts`/`.tsx`/`.d.ts`/
    `.js`/`.jsx`/`index.*`, mirroring Node/TS resolution) and registering
    each as a model too — **one level, not recursive**. Bare imports
    (`react`, `lodash`) are skipped; there is no `node_modules`
    type-awareness. A definition in a file neither opened nor directly
-   imported by an opened file will not resolve via the TypeScript path —
-   it falls back to the heuristic path (decision 6), which still finds it,
-   without type-aware accuracy. This is an accepted, honest limitation,
-   not a bug to chase: most "follow a call chain" sessions involve files
-   already open or one hop away while reviewing a diff.
+   imported by an opened file will not resolve via the TypeScript path.
+   There is no heuristic fallback for TypeScript/JavaScript (decision 8
+   deliberately excludes those language ids from the heuristic providers,
+   to avoid polluting real TS results with heuristic noise) — for those
+   two languages, unloaded means unfindable, full stop. This is an
+   accepted limitation, not a bug: most "follow a call chain" sessions
+   involve files already open or one hop away while reviewing a diff.
 4. **`CodeView` needs real model identity to make decision 3 possible.**
    Today's `<Editor>` has no `path` prop, so every file gets an anonymous,
    disposable model — nothing persists across navigation. This spec adds
@@ -142,13 +145,15 @@ mirroring `search`'s shape.
 - `<Editor>` gains `path={absPath}` and `keepCurrentModel={true}` (decision
   4). `CodeView` needs `absPath` as a new prop (currently only `fileName`
   is passed — `ContentPane` already has `file.absPath` available).
-- A new effect, gated on `languageForFile(fileName) === 'typescript'`,
-  scans `content` for import specifiers and registers resolved local
-  files as additional Monaco models (decision 3) — reads their content
-  via the existing `window.viewmaster.readFile`, creates a model via
-  `monaco.editor.getModel(uri) ?? monaco.editor.createModel(...)` (guards
-  against duplicate creation when multiple files import the same
-  dependency).
+- A new effect, gated on `languageForFile(fileName)` being `'typescript'`
+  or `'javascript'`, scans `content` for import specifiers and registers
+  resolved local files as additional Monaco models (decision 3) — reads
+  their content via the existing `window.viewmaster.readFile`, creates a
+  model via `monaco.editor.getModel(uri) ?? monaco.editor.createModel(...)`
+  (guards against duplicate creation when multiple files import the same
+  dependency), filtered to TS/JS-extension candidates only so a resolved
+  non-code import (e.g. `.css`) is never registered as a wrongly-typed
+  model.
 
 `src/renderer/src/monacoSetup.ts`: registers the heuristic
 `DefinitionProvider`/`ReferenceProvider` (decision 8) for
