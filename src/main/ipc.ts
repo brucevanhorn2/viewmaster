@@ -41,6 +41,8 @@ interface Session {
 
 let session: Session | null = null
 let currentSearchController: AbortController | null = null
+let currentDefinitionsController: AbortController | null = null
+let currentReferencesController: AbortController | null = null
 
 /**
  * Returns the session's cached file listing, populating it if this is the
@@ -65,6 +67,10 @@ async function getSearchPaths(activeSession: Session): Promise<string[]> {
 async function closeSession(): Promise<void> {
   currentSearchController?.abort()
   currentSearchController = null
+  currentDefinitionsController?.abort()
+  currentDefinitionsController = null
+  currentReferencesController?.abort()
+  currentReferencesController = null
   if (session) {
     await session.watcher.close()
     if (session.recorder) await session.recorder.close()
@@ -265,25 +271,32 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
   ipcMain.handle(
     'symbol:definitions',
     async (_e, word: string): Promise<SymbolLocationsResult> => {
-      currentSearchController?.abort()
+      currentDefinitionsController?.abort()
       const activeSession = session
       if (!activeSession) return { locations: [] }
       const controller = new AbortController()
-      currentSearchController = controller
+      currentDefinitionsController = controller
       const startedAt = Date.now()
       try {
         const paths = await getSearchPaths(activeSession)
         const { matches } = await searchFiles(activeSession.root, paths, word, {
           signal: controller.signal,
           startedAt,
-          mode: 'word'
+          mode: 'word',
+          caseSensitive: true,
+          lineFilter: (line) => looksLikeDefinition(line, word)
         })
-        const locations: SymbolLocation[] = matches
-          .filter((m) => looksLikeDefinition(m.preview, word))
-          .map((m) => ({ path: m.path, absPath: m.absPath, line: m.line, column: m.column }))
+        const seen = new Set<string>()
+        const locations: SymbolLocation[] = []
+        for (const m of matches) {
+          const key = `${m.absPath}:${m.line}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          locations.push({ path: m.path, absPath: m.absPath, line: m.line, column: m.column })
+        }
         return { locations }
-      } catch {
-        return { locations: [] }
+      } catch (err) {
+        return { locations: [], error: err instanceof Error ? err.message : String(err) }
       }
     }
   )
@@ -291,18 +304,19 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
   ipcMain.handle(
     'symbol:references',
     async (_e, word: string): Promise<SymbolLocationsResult> => {
-      currentSearchController?.abort()
+      currentReferencesController?.abort()
       const activeSession = session
       if (!activeSession) return { locations: [] }
       const controller = new AbortController()
-      currentSearchController = controller
+      currentReferencesController = controller
       const startedAt = Date.now()
       try {
         const paths = await getSearchPaths(activeSession)
         const { matches } = await searchFiles(activeSession.root, paths, word, {
           signal: controller.signal,
           startedAt,
-          mode: 'word'
+          mode: 'word',
+          caseSensitive: true
         })
         const locations: SymbolLocation[] = matches.map((m) => ({
           path: m.path,
@@ -311,8 +325,8 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
           column: m.column
         }))
         return { locations }
-      } catch {
-        return { locations: [] }
+      } catch (err) {
+        return { locations: [], error: err instanceof Error ? err.message : String(err) }
       }
     }
   )

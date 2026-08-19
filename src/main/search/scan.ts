@@ -20,6 +20,8 @@ export interface SearchScanOptions {
   signal?: AbortSignal
   startedAt?: number
   mode?: 'substring' | 'word'
+  caseSensitive?: boolean
+  lineFilter?: (line: string) => boolean
 }
 
 export interface SearchScanResult {
@@ -55,16 +57,19 @@ function extractPreview(line: string, column: number): { preview: string; previe
 
 /**
  * Scans one file for up to `maxMatches` occurrences of `needle` (already
- * lowercased). `capped` is true when the file had more matches than
- * `maxMatches` allowed for (used by the caller to mark the overall result
- * `truncated`).
+ * lowercased unless `caseSensitive`). `capped` is true when the file had
+ * more matches than `maxMatches` allowed for (used by the caller to mark
+ * the overall result `truncated`). When `lineFilter` is given, a line is
+ * skipped entirely (not counted, not searched) unless the filter accepts it.
  */
 async function scanOneFile(
   absPath: string,
   relPath: string,
   needle: string,
   maxMatches: number,
-  mode: 'substring' | 'word'
+  mode: 'substring' | 'word',
+  caseSensitive: boolean,
+  lineFilter?: (line: string) => boolean
 ): Promise<{ matches: SearchMatch[]; capped: boolean }> {
   if (maxMatches <= 0) return { matches: [], capped: false }
 
@@ -85,7 +90,8 @@ async function scanOneFile(
 
   const results: SearchMatch[] = []
   let capped = false
-  const wordPattern = mode === 'word' ? new RegExp(`\\b${escapeRegExp(needle)}\\b`, 'gi') : null
+  const wordPattern =
+    mode === 'word' ? new RegExp(`\\b${escapeRegExp(needle)}\\b`, caseSensitive ? 'g' : 'gi') : null
   const stream = createReadStream(absPath, { encoding: 'utf8' })
   const rl = createInterface({
     input: stream,
@@ -96,6 +102,7 @@ async function scanOneFile(
     try {
       outer: for await (const line of rl) {
         lineNumber++
+        if (lineFilter && !lineFilter(line)) continue
         if (wordPattern) {
           wordPattern.lastIndex = 0
           let match: RegExpExecArray | null
@@ -115,7 +122,7 @@ async function scanOneFile(
             }
           }
         } else {
-          const column = line.toLowerCase().indexOf(needle)
+          const column = caseSensitive ? line.indexOf(needle) : line.toLowerCase().indexOf(needle)
           if (column === -1) continue
           const { preview, previewColumn } = extractPreview(line, column)
           results.push({ path: relPath, absPath, line: lineNumber, column, preview, previewColumn })
@@ -174,8 +181,10 @@ export async function searchFiles(
   options: SearchScanOptions = {}
 ): Promise<SearchScanResult> {
   if (query.trim() === '') return { matches: [], truncated: false }
-  const needle = query.toLowerCase()
+  const caseSensitive = options.caseSensitive ?? false
+  const needle = caseSensitive ? query : query.toLowerCase()
   const mode = options.mode ?? 'substring'
+  const lineFilter = options.lineFilter
   const matches: SearchMatch[] = []
   let truncated = false
   const startedAt = options.startedAt ?? Date.now()
@@ -193,7 +202,15 @@ export async function searchFiles(
     }
     const perFileCap = Math.min(MAX_MATCHES_PER_FILE, MAX_MATCHES_TOTAL - matches.length)
     const absPath = join(root, relPath)
-    const { matches: fileMatches, capped } = await scanOneFile(absPath, relPath, needle, perFileCap, mode)
+    const { matches: fileMatches, capped } = await scanOneFile(
+      absPath,
+      relPath,
+      needle,
+      perFileCap,
+      mode,
+      caseSensitive,
+      lineFilter
+    )
     matches.push(...fileMatches)
     if (capped) truncated = true
   })

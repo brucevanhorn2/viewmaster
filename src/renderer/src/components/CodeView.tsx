@@ -48,9 +48,15 @@ export default function CodeView({
   // design spec), so cross-file "go to definition"/"find usages" can
   // follow an import you haven't opened yet. Bare (node_modules-style)
   // specifiers are skipped entirely — there is no node_modules
-  // type-awareness here.
+  // type-awareness here. Candidates are also filtered to TS/JS
+  // extensions only -- a resolved import like './styles.css' must not
+  // be registered as a 'typescript' model (Monaco/monaco-editor-react
+  // reuse an existing model by URI and ignore value/language on later
+  // mounts, so a wrongly-typed model corrupts that file's own display
+  // the next time it's actually opened).
   useEffect(() => {
-    if (languageForFile(fileName) !== 'typescript') return
+    const language = languageForFile(fileName)
+    if (language !== 'typescript' && language !== 'javascript') return
     let cancelled = false
     const lastSlash = absPath.lastIndexOf('/')
     const fromDir = lastSlash === -1 ? absPath : absPath.slice(0, lastSlash)
@@ -59,12 +65,13 @@ export default function CodeView({
       specifiers.map(async (specifier) => {
         for (const candidate of candidateImportPaths(fromDir, specifier)) {
           if (cancelled) return
+          if (!/\.(ts|tsx|d\.ts|js|jsx|mjs|cjs|cts|mts)$/.test(candidate)) continue
           const uri = monaco.Uri.file(candidate)
           if (monaco.editor.getModel(uri)) return
           const result = await window.viewmaster.readFile(candidate)
           if (cancelled || result.kind !== 'text') continue
           if (!monaco.editor.getModel(uri)) {
-            monaco.editor.createModel(result.content, 'typescript', uri)
+            monaco.editor.createModel(result.content, languageForFile(candidate), uri)
           }
           return
         }

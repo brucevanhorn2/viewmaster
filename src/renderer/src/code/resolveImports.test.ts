@@ -35,6 +35,11 @@ describe('extractImportSpecifiers', () => {
     const content = "import './App.css'\nimport { useState } from 'react'\nimport Foo from './Foo'\n"
     expect(extractImportSpecifiers(content)).toEqual(['./App.css', 'react', './Foo'])
   })
+
+  it('does not let a comment containing the word "import" swallow a later side-effect import', () => {
+    const content = "// import order matters here\nimport './polyfills'\nimport { a } from './a'\n"
+    expect(extractImportSpecifiers(content)).toEqual(['./polyfills', './a'])
+  })
 })
 
 describe('candidateImportPaths', () => {
