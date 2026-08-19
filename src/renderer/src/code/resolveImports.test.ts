@@ -30,6 +30,11 @@ describe('extractImportSpecifiers', () => {
   it('deduplicates repeated specifiers', () => {
     expect(extractImportSpecifiers("import a from './x'\nimport b from './x'\n")).toEqual(['./x'])
   })
+
+  it('extracts a side-effect import even when a later import has a from clause', () => {
+    const content = "import './App.css'\nimport { useState } from 'react'\nimport Foo from './Foo'\n"
+    expect(extractImportSpecifiers(content)).toEqual(['./App.css', 'react', './Foo'])
+  })
 })
 
 describe('candidateImportPaths', () => {

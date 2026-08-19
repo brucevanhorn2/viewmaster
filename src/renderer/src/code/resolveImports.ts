@@ -1,5 +1,5 @@
 const IMPORT_PATTERNS = [
-  /\bimport\s+(?:[\s\S]*?\bfrom\s+)?['"]([^'"]+)['"]/g,
+  /\bimport\s+(?:[\s\S]*?\bfrom\s+)??['"]([^'"]+)['"]/g,
   /\bexport\s+[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/g,
   /\brequire\(\s*['"]([^'"]+)['"]\s*\)/g
 ]
