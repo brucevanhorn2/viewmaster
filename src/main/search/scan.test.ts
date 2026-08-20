@@ -158,4 +158,13 @@ describe('searchFiles', () => {
     const { matches } = await searchFiles(repo.root, ['a.txt'], 'foo')
     expect(matches).toHaveLength(1)
   })
+
+  it('word mode with `words` option matches any of multiple words', async () => {
+    await repo.write('a.txt', 'alpha\nbeta\ngamma\ndelta\n')
+    const { matches } = await searchFiles(repo.root, ['a.txt'], 'alpha', {
+      mode: 'word',
+      words: ['alpha', 'gamma']
+    })
+    expect(matches.map((m) => m.line)).toEqual([1, 3])
+  })
 })

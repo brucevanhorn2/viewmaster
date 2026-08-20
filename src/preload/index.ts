@@ -41,6 +41,7 @@ const api = {
   onMenuOpenFolder: (cb: (root: string) => void): (() => void) =>
     subscribe('menu:openFolder', cb),
   onMenuFindInFiles: (cb: () => void): (() => void) => subscribe<void>('menu:findInFiles', () => cb()),
+  onMenuRelatedFiles: (cb: () => void): (() => void) => subscribe<void>('menu:relatedFiles', () => cb()),
   onMenuGoBack: (cb: () => void): (() => void) => subscribe<void>('menu:goBack', () => cb()),
   onMenuGoForward: (cb: () => void): (() => void) => subscribe<void>('menu:goForward', () => cb()),
   onHistoryChanged: (cb: (relPath: string) => void): (() => void) =>
@@ -52,7 +53,11 @@ const api = {
   findDefinitions: (word: string): Promise<SymbolLocationsResult> =>
     ipcRenderer.invoke('symbol:definitions', word),
   findReferences: (word: string): Promise<SymbolLocationsResult> =>
-    ipcRenderer.invoke('symbol:references', word)
+    ipcRenderer.invoke('symbol:references', word),
+  findImportedBy: (basename: string): Promise<SymbolLocationsResult> =>
+    ipcRenderer.invoke('related:importedBy', basename),
+  findRelatedReferences: (names: string[]): Promise<SymbolLocationsResult> =>
+    ipcRenderer.invoke('related:references', names)
 }
 
 export type ViewmasterApi = typeof api

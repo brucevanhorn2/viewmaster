@@ -44,7 +44,7 @@ const CANDIDATE_SUFFIXES = [
  * `markdown/paths.ts` from issue #5, this does not handle Windows path
  * separators (an accepted, pre-existing limitation, not new here).
  */
-function posixJoin(dir: string, specifier: string): string {
+export function posixJoin(dir: string, specifier: string): string {
   const segments = `${dir}/${specifier}`.split('/')
   const resolved: string[] = []
   for (const segment of segments) {
