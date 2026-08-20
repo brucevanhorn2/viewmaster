@@ -91,13 +91,8 @@ describe('searchFiles', () => {
   })
 
   it('caps total matches across files and marks the result truncated', async () => {
-    // 600 one-match files, well beyond the CONCURRENCY (24) worker pool, so
-    // the queue isn't fully drained (all files dispatched) before the
-    // running total crosses MAX_MATCHES_TOTAL (500) — with too few files
-    // relative to concurrency, every file gets dispatched while there's
-    // still plenty of budget left, and the total cap never has a chance to
-    // engage. One match per file also keeps this test decoupled from the
-    // per-file cap (covered separately below).
+    // 600 one-match files. One match per file keeps this test decoupled
+    // from the per-file cap (covered separately above).
     const paths: string[] = []
     for (let i = 0; i < 600; i++) {
       const path = `file${i}.txt`
@@ -106,9 +101,42 @@ describe('searchFiles', () => {
     }
     const { matches, truncated } = await searchFiles(repo.root, paths, 'needle')
     expect(truncated).toBe(true)
-    // Caps are soft under concurrency (scan.ts's own doc comment) — assert
-    // the cap was actually reached, not an exact count.
-    expect(matches.length).toBeGreaterThanOrEqual(500)
+    // The cap is exact now (every file scans to completion, then the
+    // sorted result is sliced to MAX_MATCHES_TOTAL) — no longer a soft,
+    // scan-completion-timing-dependent overshoot.
+    expect(matches).toHaveLength(500)
+  })
+
+  it('returns matches sorted by path then line, regardless of scan dispatch order', async () => {
+    await repo.write('z.txt', 'needle\n')
+    await repo.write('a.txt', 'x\nneedle\nneedle\n')
+    await repo.write('m.txt', 'needle\n')
+    // Dispatch order deliberately not alphabetical.
+    const { matches } = await searchFiles(repo.root, ['z.txt', 'a.txt', 'm.txt'], 'needle')
+    expect(matches.map((m) => `${m.path}:${m.line}`)).toEqual([
+      'a.txt:2',
+      'a.txt:3',
+      'm.txt:1',
+      'z.txt:1'
+    ])
+  })
+
+  it('truncates to the alphabetically-first paths deterministically, not by scan-completion timing', async () => {
+    const paths: string[] = []
+    for (let i = 0; i < 600; i++) {
+      const path = `file${String(i).padStart(3, '0')}.txt`
+      await repo.write(path, 'needle\n')
+      paths.push(path)
+    }
+    // Shuffle dispatch order so completion timing can't correlate with
+    // path order — under the old behavior this could let a late-in-array,
+    // fast-completing file "steal" cap headroom from an earlier one.
+    const shuffled = [...paths].sort(() => Math.random() - 0.5)
+    const { matches, truncated } = await searchFiles(repo.root, shuffled, 'needle')
+    expect(truncated).toBe(true)
+    expect(matches).toHaveLength(500)
+    const expectedPaths = [...paths].sort((a, b) => a.localeCompare(b)).slice(0, 500)
+    expect(matches.map((m) => m.path)).toEqual(expectedPaths)
   })
 
   it('stops scanning promptly when aborted mid-scan rather than completing anyway', async () => {
