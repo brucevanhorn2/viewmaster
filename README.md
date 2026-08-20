@@ -26,6 +26,11 @@ ever *views* — it never edits your files.
 - Click a **PDF** → rendered pages via a canvas-based viewer, with
   Prev/Next navigation for multi-page documents.
 
+### HTML viewing
+- Click an **HTML** file (`.html`/`.htm`) → sandboxed rendered preview (no
+  network access, no external requests), with a **Rendered | Code | Diff**
+  toggle and an **Open in Default Browser** action.
+
 ### Branch diff viewing
 - Left sidebar shows **only the files changed within the current branch** —
   committed, staged, or modified/untracked — collapsed to just the directories
@@ -45,11 +50,24 @@ ever *views* — it never edits your files.
   (VS Code's Monaco editor), with a **Diff toggle**.
 - Diffs are **side-by-side** by default, with an inline toggle.
 - **Right-click a file → Copy absolute path** (handy for pasting into AI chats).
+- **Right-click a file, folder, or the root → Open location** — reveals it
+  in your OS's file browser (Finder, Explorer, etc.).
 - The change list and open file **auto-refresh** as files change on disk.
 
 The "changed in this branch" baseline is the branch's fork point
 (`git merge-base HEAD <default-branch>`), so you see everything the branch
 introduced — not just what happens to differ from the tip of `main`.
+
+### Code navigation
+- **Find in Files** (`Cmd/Ctrl+Shift+F`) — full-text search across the open
+  folder's documents, live against current on-disk content (no index to
+  go stale).
+- **Go to Definition / Find Usages** (`F12` / `Shift+F12`) — real semantic
+  accuracy for TypeScript via Monaco's bundled language service, with a
+  language-agnostic heuristic fallback for other languages.
+- **Related Files** (`Cmd/Ctrl+Alt+R`) — see what the selected file
+  imports, what imports it, and what references its declared symbols —
+  even files untouched by the current branch.
 
 ## Tech stack
 
@@ -92,12 +110,8 @@ This is a one-time step per machine. Signing and notarization are on the roadmap
   ([#11](https://github.com/brucevanhorn2/viewmaster/issues/11)).
 - Code signing + notarization for Gatekeeper-clean, distributable DMGs
   ([#12](https://github.com/brucevanhorn2/viewmaster/issues/12)).
-- Full-text search across the open folder's documents
-  ([#6](https://github.com/brucevanhorn2/viewmaster/issues/6)).
 - Configurable baseline (compare against an arbitrary branch or ref)
   ([#13](https://github.com/brucevanhorn2/viewmaster/issues/13)).
-- Find usages / jump to definition for code symbols, IDE-style
-  ([#7](https://github.com/brucevanhorn2/viewmaster/issues/7)).
 
 ## Status
 
