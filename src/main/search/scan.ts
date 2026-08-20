@@ -8,12 +8,17 @@ import { BINARY_SNIFF_BYTES, MAX_SIZE } from '../git/content'
 const CONCURRENCY = 24
 const MAX_MATCHES_PER_FILE = 50
 const MAX_MATCHES_TOTAL = 500
+const COMPACTION_THRESHOLD = MAX_MATCHES_TOTAL * 4
 const TIME_BUDGET_MS = 10000
 const PREVIEW_MAX_LENGTH = 200
 const PREVIEW_CONTEXT = 60
 
 export function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function compareMatches(a: SearchMatch, b: SearchMatch): number {
+  return a.path.localeCompare(b.path) || a.line - b.line || a.column - b.column
 }
 
 export interface SearchScanOptions {
@@ -181,7 +186,11 @@ async function runWithConcurrency<T>(
  * sorted by (path, line, column) and sliced to MAX_MATCHES_TOTAL if
  * longer, so both the match order and which matches survive truncation
  * are deterministic for a given file set and query, independent of
- * worker-completion timing. `options.signal`, if already aborted or
+ * worker-completion timing. Determinism (both here and when the time
+ * budget below cuts scanning short) assumes `paths` is already sorted
+ * the same way the final result is — true for every current caller,
+ * since `getSearchPaths` sources from `listGitTree`/`listFolderTree`,
+ * which already sort. `options.signal`, if already aborted or
  * aborted mid-scan, stops dispatching new file scans promptly (a file
  * scan already in flight when the abort happens is not cancelled
  * mid-file).
@@ -221,9 +230,14 @@ export async function searchFiles(
     )
     matches.push(...fileMatches)
     if (capped) truncated = true
+    if (matches.length > COMPACTION_THRESHOLD) {
+      matches.sort(compareMatches)
+      matches.length = MAX_MATCHES_TOTAL
+      truncated = true
+    }
   })
 
-  matches.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line || a.column - b.column)
+  matches.sort(compareMatches)
   if (matches.length > MAX_MATCHES_TOTAL) {
     matches.length = MAX_MATCHES_TOTAL
     truncated = true

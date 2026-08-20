@@ -128,11 +128,28 @@ describe('searchFiles', () => {
       await repo.write(path, 'needle\n')
       paths.push(path)
     }
-    // Shuffle dispatch order so completion timing can't correlate with
+    // Reverse dispatch order so completion timing can't correlate with
     // path order — under the old behavior this could let a late-in-array,
     // fast-completing file "steal" cap headroom from an earlier one.
-    const shuffled = [...paths].sort(() => Math.random() - 0.5)
+    const shuffled = [...paths].reverse()
     const { matches, truncated } = await searchFiles(repo.root, shuffled, 'needle')
+    expect(truncated).toBe(true)
+    expect(matches).toHaveLength(500)
+    const expectedPaths = [...paths].sort((a, b) => a.localeCompare(b)).slice(0, 500)
+    expect(matches.map((m) => m.path)).toEqual(expectedPaths)
+  })
+
+  it('keeps the correct top matches even when in-scan compaction fires partway through', async () => {
+    // 2,100 one-match files — comfortably past COMPACTION_THRESHOLD (2000)
+    // and MAX_MATCHES_TOTAL (500), so at least one mid-scan compaction is
+    // guaranteed to run before the final sort+slice.
+    const paths: string[] = []
+    for (let i = 0; i < 2100; i++) {
+      const path = `file${String(i).padStart(4, '0')}.txt`
+      await repo.write(path, 'needle\n')
+      paths.push(path)
+    }
+    const { matches, truncated } = await searchFiles(repo.root, [...paths].reverse(), 'needle')
     expect(truncated).toBe(true)
     expect(matches).toHaveLength(500)
     const expectedPaths = [...paths].sort((a, b) => a.localeCompare(b)).slice(0, 500)
