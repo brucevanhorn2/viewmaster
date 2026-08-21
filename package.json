@@ -1,7 +1,7 @@
 {
   "name": "viewmaster",
   "productName": "View Master",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Read-only desktop viewer for markdown, images, PDFs, and branch diffs",
   "main": "./out/main/index.js",
   "author": "Bruce Van Horn",
