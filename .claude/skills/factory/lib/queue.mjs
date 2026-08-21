@@ -34,6 +34,22 @@ export function conflictsWith(conflicts, issue) {
   return set
 }
 
+export function nextIssue(rankedEntries, conflicts, { queuedIssues, executingIssues }) {
+  const queuedSet = new Set(queuedIssues)
+  for (const entry of rankedEntries) {
+    if (!queuedSet.has(entry.issue)) continue
+    const blockers = conflictsWith(conflicts, entry.issue)
+    const blocked = executingIssues.some((n) => blockers.has(n))
+    if (!blocked) return entry.issue
+  }
+  return null
+}
+
+export function nextSlot(planReadyIssues, executingCount, cap) {
+  if (executingCount >= cap || planReadyIssues.length === 0) return null
+  return Math.min(...planReadyIssues)
+}
+
 export function renderQueueMarkdown(state) {
   const { cap, generatedAt, entries, conflicts } = state
   const stateBlock = JSON.stringify({ cap, generatedAt, entries, conflicts }, null, 2)
