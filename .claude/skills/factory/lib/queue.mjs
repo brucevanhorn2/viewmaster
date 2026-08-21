@@ -45,9 +45,14 @@ export function nextIssue(rankedEntries, conflicts, { queuedIssues, executingIss
   return null
 }
 
-export function nextSlot(planReadyIssues, executingCount, cap) {
-  if (executingCount >= cap || planReadyIssues.length === 0) return null
-  return Math.min(...planReadyIssues)
+export function nextSlot(planReadyIssues, conflicts, executingIssues, cap) {
+  if (executingIssues.length >= cap || planReadyIssues.length === 0) return null
+  const eligible = planReadyIssues.filter((issue) => {
+    const blockers = conflictsWith(conflicts, issue)
+    return !executingIssues.some((n) => blockers.has(n))
+  })
+  if (eligible.length === 0) return null
+  return Math.min(...eligible)
 }
 
 export function renderQueueMarkdown(state) {

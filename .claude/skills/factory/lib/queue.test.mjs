@@ -87,13 +87,23 @@ test('nextIssue returns null when the queue is empty', () => {
 })
 
 test('nextSlot returns the lowest-numbered plan-ready issue when a slot is free', () => {
-  assert.equal(nextSlot([9, 4, 7], 1, 3), 4)
+  assert.equal(nextSlot([9, 4, 7], [], [1], 3), 4)
 })
 
 test('nextSlot returns null when the cap is already reached', () => {
-  assert.equal(nextSlot([4], 3, 3), null)
+  assert.equal(nextSlot([4], [], [1, 2, 3], 3), null)
 })
 
 test('nextSlot returns null when nothing is plan-ready', () => {
-  assert.equal(nextSlot([], 0, 3), null)
+  assert.equal(nextSlot([], [], [], 3), null)
+})
+
+test('nextSlot skips a plan-ready issue that conflicts with something executing', () => {
+  const conflicts = [[4, 10]]
+  assert.equal(nextSlot([4, 7], conflicts, [10], 3), 7)
+})
+
+test('nextSlot returns null when the only plan-ready issue conflicts with something executing', () => {
+  const conflicts = [[4, 10]]
+  assert.equal(nextSlot([4], conflicts, [10], 3), null)
 })

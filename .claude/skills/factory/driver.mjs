@@ -56,10 +56,10 @@ const commands = {
     const state = parseQueueMarkdown(text)
     const ranked = rankIssues(state.entries)
     const queuedIssues = JSON.parse(
-      gh(['issue', 'list', '--label', 'factory:queued', '--state', 'open', '--json', 'number'])
+      gh(['issue', 'list', '--label', 'factory:queued', '--state', 'open', '--json', 'number', '--limit', '1000'])
     ).map((i) => i.number)
     const executingIssues = JSON.parse(
-      gh(['issue', 'list', '--label', 'factory:executing', '--state', 'open', '--json', 'number'])
+      gh(['issue', 'list', '--label', 'factory:executing', '--state', 'open', '--json', 'number', '--limit', '1000'])
     ).map((i) => i.number)
     const chosen = nextIssue(ranked, state.conflicts, { queuedIssues, executingIssues })
     process.stdout.write(chosen === null ? 'none\n' : `${chosen}\n`)
@@ -67,12 +67,12 @@ const commands = {
   'next-slot'() {
     const state = parseQueueMarkdown(readFileSync(QUEUE_PATH, 'utf8'))
     const planReadyIssues = JSON.parse(
-      gh(['issue', 'list', '--label', 'factory:plan-ready', '--state', 'open', '--json', 'number'])
+      gh(['issue', 'list', '--label', 'factory:plan-ready', '--state', 'open', '--json', 'number', '--limit', '1000'])
     ).map((i) => i.number)
-    const executingCount = JSON.parse(
-      gh(['issue', 'list', '--label', 'factory:executing', '--state', 'open', '--json', 'number'])
-    ).length
-    const chosen = nextSlot(planReadyIssues, executingCount, state.cap)
+    const executingIssues = JSON.parse(
+      gh(['issue', 'list', '--label', 'factory:executing', '--state', 'open', '--json', 'number', '--limit', '1000'])
+    ).map((i) => i.number)
+    const chosen = nextSlot(planReadyIssues, state.conflicts, executingIssues, state.cap)
     process.stdout.write(chosen === null ? 'none\n' : `${chosen}\n`)
   },
   'setup-labels'() {
@@ -87,8 +87,14 @@ const commands = {
     }
   },
   'list-open-issues'() {
-    const all = JSON.parse(gh(['issue', 'list', '--state', 'open', '--json', 'number,title,body,url,labels']))
-    const untriaged = all.filter((i) => !i.labels.some((l) => FACTORY_LABELS.includes(l.name)))
+    const all = JSON.parse(
+      gh(['issue', 'list', '--state', 'open', '--json', 'number,title,body,url,labels', '--limit', '1000'])
+    )
+    // Exclude issues that are past factory:queued in the pipeline, but still
+    // include issues currently at factory:queued so re-running triage can
+    // re-rank them alongside brand-new issues instead of stranding them.
+    const excludeLabels = FACTORY_LABELS.filter((l) => l !== 'factory:queued')
+    const untriaged = all.filter((i) => !i.labels.some((l) => excludeLabels.includes(l.name)))
     process.stdout.write(JSON.stringify(untriaged, null, 2) + '\n')
   },
   'set-label'() {
@@ -115,14 +121,40 @@ const commands = {
   'create-pr'() {
     const [issue, branch, title] = process.argv.slice(3)
     if (!issue || !branch || !title) throw new Error('usage: create-pr <issue> <branch> <title>')
+    const existing = JSON.parse(gh(['pr', 'list', '--head', branch, '--state', 'open', '--json', 'url']))
+    if (existing.length) {
+      process.stdout.write(`${existing[0].url}\n`)
+      return
+    }
     const url = gh(['pr', 'create', '--head', branch, '--title', title, '--body', `Resolves #${issue}`]).trim()
     process.stdout.write(`${url}\n`)
   },
+  'mark-review-round'() {
+    const [issue] = process.argv.slice(3)
+    if (!issue) throw new Error('usage: mark-review-round <issue>')
+    gh(['issue', 'comment', issue, '--body', 'factory:review-round'])
+    process.stdout.write('posted\n')
+  },
+  'count-review-rounds'() {
+    const [issue] = process.argv.slice(3)
+    if (!issue) throw new Error('usage: count-review-rounds <issue>')
+    const data = JSON.parse(gh(['issue', 'view', issue, '--json', 'comments']))
+    const count = data.comments.filter((c) => c.body === 'factory:review-round').length
+    process.stdout.write(`${count}\n`)
+  },
   status() {
+    let executingCount = 0
     for (const label of FACTORY_LABELS) {
-      const issues = JSON.parse(gh(['issue', 'list', '--label', label, '--state', 'open', '--json', 'number,title']))
+      const issues = JSON.parse(
+        gh(['issue', 'list', '--label', label, '--state', 'open', '--json', 'number,title', '--limit', '1000'])
+      )
+      if (label === 'factory:executing') executingCount = issues.length
       process.stdout.write(`${label} (${issues.length}):\n`)
       for (const i of issues) process.stdout.write(`  #${i.number} ${i.title}\n`)
+    }
+    if (existsSync(QUEUE_PATH)) {
+      const state = parseQueueMarkdown(readFileSync(QUEUE_PATH, 'utf8'))
+      process.stdout.write(`executing ${executingCount}/${state.cap} slots\n`)
     }
   }
 }

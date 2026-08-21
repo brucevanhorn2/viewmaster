@@ -32,7 +32,9 @@ Dispatch on the first word of `$ARGUMENTS`.
 Before doing anything else, both verbs below first check for waiting work:
 
 1. `node .claude/skills/factory/driver.mjs next-slot`. If it prints an issue
-   number `<m>` (not `none`): find its worktree under
+   number `<m>` (not `none` — this is the earliest by issue number among
+   plan-ready issues not conflicting with anything currently executing):
+   find its worktree under
    `.claude/worktrees/issue-<m>-*`, launch its background execution agent
    the same way as step 7 of `/factory next` below (same prompt shape,
    pointed at that worktree and `docs/superpowers/plans/` file), and run
@@ -59,14 +61,15 @@ Before doing anything else, both verbs below first check for waiting work:
 0. Run the slot-queue drain above.
 1. `gh issue view <issue> --json labels` — confirm it's currently `factory:awaiting-push`; if not, tell the user and stop.
 2. `node .claude/skills/factory/driver.mjs set-label <issue> factory:in-review`.
-3. Read the branch name from the worktree directory under `.claude/worktrees/issue-<issue>-*` (it's `worktree-issue-<issue>-<slug>`). `node .claude/skills/factory/driver.mjs create-pr <issue> <branch> "<title from the issue>"`.
-4. Invoke `code-review` at medium effort against this PR's diff.
-5. If it finds issues: address them (commit fixes in the worktree), `node .claude/skills/factory/driver.mjs set-label <issue> factory:awaiting-push`, print the push command, and stop — tell the user to push and re-run `/factory push-done <issue>`. Track review rounds for this issue across the conversation; after a 4th round still finding issues, instead run `node .claude/skills/factory/driver.mjs set-label <issue> factory:needs-attention` and tell the user review isn't converging.
-6. If review is clean: `node .claude/skills/factory/driver.mjs set-label <issue> factory:ready-to-merge` and tell the user the PR is ready for them to merge.
+3. Read the branch name from the worktree directory under `.claude/worktrees/issue-<issue>-*` (it's `worktree-issue-<issue>-<slug>`). `node .claude/skills/factory/driver.mjs create-pr <issue> <branch> "<title from the issue>"` (safe to re-run — it reuses an existing open PR for that branch instead of erroring).
+4. `node .claude/skills/factory/driver.mjs count-review-rounds <issue>`. If the count is already `3` or more, skip review entirely: run `node .claude/skills/factory/driver.mjs set-label <issue> factory:needs-attention` and tell the user review isn't converging, then stop.
+5. Otherwise invoke `code-review` at medium effort against this PR's diff.
+6. If it finds issues: address them (commit fixes in the worktree), run `node .claude/skills/factory/driver.mjs mark-review-round <issue>` to record that this round happened, then `node .claude/skills/factory/driver.mjs set-label <issue> factory:awaiting-push`, print the push command, and stop — tell the user to push and re-run `/factory push-done <issue>`.
+7. If review is clean: `node .claude/skills/factory/driver.mjs set-label <issue> factory:ready-to-merge` and tell the user the PR is ready for them to merge.
 
 ## `/factory review <issue>`
 
-Same as steps 4-6 of `/factory push-done` above, for re-running review on demand (e.g. after the user pushed manual changes) without a fresh push cycle.
+Same as steps 4-7 of `/factory push-done` above, for re-running review on demand (e.g. after the user pushed manual changes) without a fresh push cycle.
 
 ## `/factory status`
 
