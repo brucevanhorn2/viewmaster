@@ -1,15 +1,29 @@
 #!/usr/bin/env node
 // .claude/skills/factory/driver.mjs
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   rankIssues,
   buildConflictGraph,
+  nextIssue,
+  nextSlot,
   renderQueueMarkdown,
   parseQueueMarkdown
 } from './lib/queue.mjs'
+import { FACTORY_LABELS, computeLabelTransition } from './lib/labels.mjs'
 
 function readStdin() {
   return readFileSync(0, 'utf8')
+}
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = join(__dirname, '..', '..', '..')
+const QUEUE_PATH = join(REPO_ROOT, '.claude', 'factory', 'queue.md')
+
+function gh(args) {
+  return execFileSync('gh', args, { encoding: 'utf8', cwd: REPO_ROOT })
 }
 
 const commands = {
@@ -28,6 +42,88 @@ const commands = {
   'parse-queue'() {
     const text = readStdin()
     process.stdout.write(JSON.stringify(parseQueueMarkdown(text), null, 2) + '\n')
+  },
+  'write-queue'() {
+    const state = JSON.parse(readStdin())
+    const ranked = rankIssues(state.entries)
+    const toWrite = { ...state, entries: ranked }
+    mkdirSync(dirname(QUEUE_PATH), { recursive: true })
+    writeFileSync(QUEUE_PATH, renderQueueMarkdown(toWrite))
+    process.stdout.write(`Wrote ${QUEUE_PATH}\n`)
+  },
+  'next-issue'() {
+    const text = readFileSync(QUEUE_PATH, 'utf8')
+    const state = parseQueueMarkdown(text)
+    const ranked = rankIssues(state.entries)
+    const queuedIssues = JSON.parse(
+      gh(['issue', 'list', '--label', 'factory:queued', '--state', 'open', '--json', 'number'])
+    ).map((i) => i.number)
+    const executingIssues = JSON.parse(
+      gh(['issue', 'list', '--label', 'factory:executing', '--state', 'open', '--json', 'number'])
+    ).map((i) => i.number)
+    const chosen = nextIssue(ranked, state.conflicts, { queuedIssues, executingIssues })
+    process.stdout.write(chosen === null ? 'none\n' : `${chosen}\n`)
+  },
+  'next-slot'() {
+    const state = parseQueueMarkdown(readFileSync(QUEUE_PATH, 'utf8'))
+    const planReadyIssues = JSON.parse(
+      gh(['issue', 'list', '--label', 'factory:plan-ready', '--state', 'open', '--json', 'number'])
+    ).map((i) => i.number)
+    const executingCount = JSON.parse(
+      gh(['issue', 'list', '--label', 'factory:executing', '--state', 'open', '--json', 'number'])
+    ).length
+    const chosen = nextSlot(planReadyIssues, executingCount, state.cap)
+    process.stdout.write(chosen === null ? 'none\n' : `${chosen}\n`)
+  },
+  'setup-labels'() {
+    for (const label of FACTORY_LABELS) {
+      try {
+        gh(['label', 'create', label, '--color', 'ededed', '--force'])
+        process.stdout.write(`ensured label ${label}\n`)
+      } catch (err) {
+        process.stderr.write(`failed to create ${label}: ${err.message}\n`)
+        process.exitCode = 1
+      }
+    }
+  },
+  'list-open-issues'() {
+    const all = JSON.parse(gh(['issue', 'list', '--state', 'open', '--json', 'number,title,body,url,labels']))
+    const untriaged = all.filter((i) => !i.labels.some((l) => FACTORY_LABELS.includes(l.name)))
+    process.stdout.write(JSON.stringify(untriaged, null, 2) + '\n')
+  },
+  'set-label'() {
+    const [issue, newLabel] = process.argv.slice(3)
+    if (!issue || !newLabel) throw new Error('usage: set-label <issue> <label>')
+    const current = JSON.parse(gh(['issue', 'view', issue, '--json', 'labels'])).labels.map((l) => l.name)
+    const { toRemove, toAdd } = computeLabelTransition(current, newLabel)
+    if (toRemove.length || toAdd.length) {
+      const args = ['issue', 'edit', issue]
+      for (const l of toRemove) args.push('--remove-label', l)
+      for (const l of toAdd) args.push('--add-label', l)
+      gh(args)
+    }
+    process.stdout.write(`#${issue}: -${toRemove.join(',')} +${toAdd.join(',')}\n`)
+  },
+  'create-worktree'() {
+    const [issue, slug] = process.argv.slice(3)
+    if (!issue || !slug) throw new Error('usage: create-worktree <issue> <slug>')
+    const branch = `worktree-issue-${issue}-${slug}`
+    const path = join('.claude', 'worktrees', `issue-${issue}-${slug}`)
+    execFileSync('git', ['worktree', 'add', path, '-b', branch], { cwd: REPO_ROOT, stdio: 'inherit' })
+    process.stdout.write(`${path}\n`)
+  },
+  'create-pr'() {
+    const [issue, branch, title] = process.argv.slice(3)
+    if (!issue || !branch || !title) throw new Error('usage: create-pr <issue> <branch> <title>')
+    const url = gh(['pr', 'create', '--head', branch, '--title', title, '--body', `Resolves #${issue}`]).trim()
+    process.stdout.write(`${url}\n`)
+  },
+  status() {
+    for (const label of FACTORY_LABELS) {
+      const issues = JSON.parse(gh(['issue', 'list', '--label', label, '--state', 'open', '--json', 'number,title']))
+      process.stdout.write(`${label} (${issues.length}):\n`)
+      for (const i of issues) process.stdout.write(`  #${i.number} ${i.title}\n`)
+    }
   }
 }
 
