@@ -1,6 +1,39 @@
 const FENCE_START = '```json'
 const FENCE_END = '```'
 
+export function rankIssues(entries) {
+  return [...entries].sort((a, b) => {
+    const aBug = a.bugOrFeature === 'bug' ? 0 : 1
+    const bBug = b.bugOrFeature === 'bug' ? 0 : 1
+    if (aBug !== bBug) return aBug - bBug
+    if (a.difficulty !== b.difficulty) return a.difficulty - b.difficulty
+    if (a.impact !== b.impact) return b.impact - a.impact
+    return a.issue - b.issue
+  })
+}
+
+export function buildConflictGraph(entries) {
+  const conflicts = []
+  for (let i = 0; i < entries.length; i++) {
+    for (let j = i + 1; j < entries.length; j++) {
+      const a = entries[i]
+      const b = entries[j]
+      const shared = a.likelyFiles.some((f) => b.likelyFiles.includes(f))
+      if (shared) conflicts.push([a.issue, b.issue])
+    }
+  }
+  return conflicts
+}
+
+export function conflictsWith(conflicts, issue) {
+  const set = new Set()
+  for (const [a, b] of conflicts) {
+    if (a === issue) set.add(b)
+    if (b === issue) set.add(a)
+  }
+  return set
+}
+
 export function renderQueueMarkdown(state) {
   const { cap, generatedAt, entries, conflicts } = state
   const stateBlock = JSON.stringify({ cap, generatedAt, entries, conflicts }, null, 2)
