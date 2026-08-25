@@ -77,5 +77,6 @@ export interface SymbolLocation {
 
 export interface SymbolLocationsResult {
   locations: SymbolLocation[]
+  truncated: boolean
   error?: string
 }

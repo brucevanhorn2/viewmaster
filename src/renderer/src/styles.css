@@ -873,3 +873,8 @@ body {
 .related-files-row:hover {
   background: var(--bg-hover);
 }
+.related-files-truncated {
+  padding: 8px 10px;
+  color: #d7ba7d;
+  font-size: 11px;
+}

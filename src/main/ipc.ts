@@ -297,13 +297,13 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     async (_e, word: string): Promise<SymbolLocationsResult> => {
       currentDefinitionsController?.abort()
       const activeSession = session
-      if (!activeSession) return { locations: [] }
+      if (!activeSession) return { locations: [], truncated: false }
       const controller = new AbortController()
       currentDefinitionsController = controller
       const startedAt = Date.now()
       try {
         const paths = await getSearchPaths(activeSession)
-        const { matches } = await searchFiles(activeSession.root, paths, word, {
+        const { matches, truncated } = await searchFiles(activeSession.root, paths, word, {
           signal: controller.signal,
           startedAt,
           mode: 'word',
@@ -318,9 +318,9 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
           seen.add(key)
           locations.push({ path: m.path, absPath: m.absPath, line: m.line, column: m.column })
         }
-        return { locations }
+        return { locations, truncated }
       } catch (err) {
-        return { locations: [], error: err instanceof Error ? err.message : String(err) }
+        return { locations: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
       }
     }
   )
@@ -330,13 +330,13 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     async (_e, word: string): Promise<SymbolLocationsResult> => {
       currentReferencesController?.abort()
       const activeSession = session
-      if (!activeSession) return { locations: [] }
+      if (!activeSession) return { locations: [], truncated: false }
       const controller = new AbortController()
       currentReferencesController = controller
       const startedAt = Date.now()
       try {
         const paths = await getSearchPaths(activeSession)
-        const { matches } = await searchFiles(activeSession.root, paths, word, {
+        const { matches, truncated } = await searchFiles(activeSession.root, paths, word, {
           signal: controller.signal,
           startedAt,
           mode: 'word',
@@ -348,9 +348,9 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
           line: m.line,
           column: m.column
         }))
-        return { locations }
+        return { locations, truncated }
       } catch (err) {
-        return { locations: [], error: err instanceof Error ? err.message : String(err) }
+        return { locations: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
       }
     }
   )
@@ -360,13 +360,13 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     async (_e, basename: string): Promise<SymbolLocationsResult> => {
       currentImportedByController?.abort()
       const activeSession = session
-      if (!activeSession) return { locations: [] }
+      if (!activeSession) return { locations: [], truncated: false }
       const controller = new AbortController()
       currentImportedByController = controller
       const startedAt = Date.now()
       try {
         const paths = await getSearchPaths(activeSession)
-        const { matches } = await searchFiles(activeSession.root, paths, basename, {
+        const { matches, truncated } = await searchFiles(activeSession.root, paths, basename, {
           signal: controller.signal,
           startedAt,
           mode: 'word',
@@ -381,9 +381,9 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
           seen.add(key)
           locations.push({ path: m.path, absPath: m.absPath, line: m.line, column: m.column })
         }
-        return { locations }
+        return { locations, truncated }
       } catch (err) {
-        return { locations: [], error: err instanceof Error ? err.message : String(err) }
+        return { locations: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
       }
     }
   )
@@ -393,14 +393,14 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     async (_e, names: string[]): Promise<SymbolLocationsResult> => {
       currentRelatedReferencesController?.abort()
       const activeSession = session
-      if (!activeSession) return { locations: [] }
-      if (names.length === 0) return { locations: [] }
+      if (!activeSession) return { locations: [], truncated: false }
+      if (names.length === 0) return { locations: [], truncated: false }
       const controller = new AbortController()
       currentRelatedReferencesController = controller
       const startedAt = Date.now()
       try {
         const paths = await getSearchPaths(activeSession)
-        const { matches } = await searchFiles(activeSession.root, paths, names[0], {
+        const { matches, truncated } = await searchFiles(activeSession.root, paths, names[0], {
           signal: controller.signal,
           startedAt,
           mode: 'word',
@@ -413,9 +413,9 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
           line: m.line,
           column: m.column
         }))
-        return { locations }
+        return { locations, truncated }
       } catch (err) {
-        return { locations: [], error: err instanceof Error ? err.message : String(err) }
+        return { locations: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
       }
     }
   )
