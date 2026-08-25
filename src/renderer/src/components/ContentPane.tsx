@@ -5,6 +5,7 @@ import type { NavigationTarget } from '../navigation/history'
 import CodeView from './CodeView'
 import DiffView from './DiffView'
 import MarkdownView from './MarkdownView'
+import HtmlView from './HtmlView'
 import Placeholder from './Placeholder'
 import ImageView from './ImageView'
 import { rasterDataUrl, svgDataUrl } from '../image/dataUrl'
@@ -17,6 +18,13 @@ const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx']
 function isMarkdown(path: string): boolean {
   const lower = path.toLowerCase()
   return MARKDOWN_EXTENSIONS.some((ext) => lower.endsWith(ext))
+}
+
+const HTML_EXTENSIONS = ['.html', '.htm']
+
+function isHtml(path: string): boolean {
+  const lower = path.toLowerCase()
+  return HTML_EXTENSIONS.some((ext) => lower.endsWith(ext))
 }
 
 const SVG_EXTENSION = '.svg'
@@ -168,7 +176,7 @@ export default function ContentPane({
   } else if (content.kind === 'pdf') {
     body = <PdfView base64={content.base64} />
   } else if (isSvg(file.path) && mode === 'code') {
-    body = <CodeView fileName={fileName} content={content.content} />
+    body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} />
   } else if (isSvg(file.path)) {
     body = <ImageView src={svgDataUrl(content.content)} />
   } else if (mode === 'diff') {
@@ -199,7 +207,7 @@ export default function ContentPane({
         />
       )
   } else if (mode === 'code' && isMarkdown(file.path)) {
-    body = <CodeView fileName={fileName} content={content.content} revealLine={lineTarget} />
+    body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} revealLine={lineTarget} />
   } else if (isMarkdown(file.path)) {
     body = (
       <MarkdownView
@@ -211,8 +219,19 @@ export default function ContentPane({
         onAnchorConsumed={onTargetConsumed}
       />
     )
+  } else if (mode === 'code' && isHtml(file.path)) {
+    body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} revealLine={lineTarget} />
+  } else if (isHtml(file.path)) {
+    body = (
+      <HtmlView
+        content={content.content}
+        absPath={file.absPath}
+        workspaceRoot={workspaceRoot}
+        onNavigate={onNavigate}
+      />
+    )
   } else {
-    body = <CodeView fileName={fileName} content={content.content} revealLine={lineTarget} />
+    body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} revealLine={lineTarget} />
   }
 
   const showToolbarToggles = content?.kind === 'text'
@@ -266,6 +285,26 @@ export default function ContentPane({
                 </button>
               ))}
             </span>
+          ) : showToolbarToggles && isHtml(file.path) ? (
+            <>
+              <span className="toolbar-segment">
+                {(['view', 'code', 'diff'] as const).map((m) => (
+                  <button
+                    key={m}
+                    className={`toolbar-button${mode === m ? ' active' : ''}`}
+                    onClick={() => setMode(m)}
+                  >
+                    {m === 'view' ? 'Rendered' : m === 'code' ? 'Code' : 'Diff'}
+                  </button>
+                ))}
+              </span>
+              <button
+                className="toolbar-button"
+                onClick={() => window.viewmaster.openInBrowser(file.absPath)}
+              >
+                Open in Default Browser
+              </button>
+            </>
           ) : (
             showToolbarToggles && (
               <button

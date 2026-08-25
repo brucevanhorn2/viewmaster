@@ -14,7 +14,21 @@ const STATUS_LETTER: Record<FileStatus, string> = {
 interface ContextMenuState {
   x: number
   y: number
-  file: ChangedFile
+  absPath: string
+  isFile: boolean
+}
+
+/**
+ * Joins a native, OS-separated root path with a forward-slash-only
+ * relative path (TreeNode.path is always '/'-joined, matching
+ * ChangedFile.path's own convention, regardless of platform). Detects
+ * root's separator rather than assuming '/', since the renderer has no
+ * access to Node's path.join (contextIsolation) and a hardcoded '/' would
+ * produce a mixed-separator path like 'C:\repo/src' on Windows.
+ */
+function joinRootPath(root: string, relativePath: string): string {
+  const separator = root.includes('\\') ? '\\' : '/'
+  return `${root}${separator}${relativePath.replace(/\//g, separator)}`
 }
 
 function baselineLabel(state: RepoState & { kind: 'repo' }): string {
@@ -40,7 +54,7 @@ function FileRow({
   depth: number
   selected: boolean
   onSelect: (file: ChangedFile) => void
-  onContextMenu: (e: React.MouseEvent, file: ChangedFile) => void
+  onContextMenu: (e: React.MouseEvent, absPath: string, isFile: boolean) => void
 }): React.JSX.Element {
   const name = file.path.split('/').pop() ?? file.path
   return (
@@ -48,7 +62,7 @@ function FileRow({
       className={`tree-row file-row status-${file.status}${selected ? ' selected' : ''}`}
       style={{ paddingLeft: 8 + depth * 14 }}
       onClick={() => onSelect(file)}
-      onContextMenu={(e) => onContextMenu(e, file)}
+      onContextMenu={(e) => onContextMenu(e, file.absPath, true)}
       title={file.path}
     >
       <img className="file-icon" src={fileIconUrl(name)} alt="" />
@@ -68,13 +82,15 @@ function DirNode({
   depth,
   selected,
   onSelect,
-  onContextMenu
+  onContextMenu,
+  root
 }: {
   node: TreeNode
   depth: number
   selected: string | null
   onSelect: (file: ChangedFile) => void
-  onContextMenu: (e: React.MouseEvent, file: ChangedFile) => void
+  onContextMenu: (e: React.MouseEvent, absPath: string, isFile: boolean) => void
+  root: string
 }): React.JSX.Element {
   const [expanded, setExpanded] = useState(true)
   return (
@@ -83,6 +99,7 @@ function DirNode({
         className="tree-row dir-row"
         style={{ paddingLeft: 8 + depth * 14 }}
         onClick={() => setExpanded(!expanded)}
+        onContextMenu={(e) => onContextMenu(e, joinRootPath(root, node.path), false)}
       >
         <span className={`chevron${expanded ? ' expanded' : ''}`}>›</span>
         <img className="file-icon" src={folderIconUrl(node.name, expanded)} alt="" />
@@ -95,6 +112,7 @@ function DirNode({
           selected={selected}
           onSelect={onSelect}
           onContextMenu={onContextMenu}
+          root={root}
         />
       )}
     </div>
@@ -106,13 +124,15 @@ function Children({
   depth,
   selected,
   onSelect,
-  onContextMenu
+  onContextMenu,
+  root
 }: {
   node: TreeNode
   depth: number
   selected: string | null
   onSelect: (file: ChangedFile) => void
-  onContextMenu: (e: React.MouseEvent, file: ChangedFile) => void
+  onContextMenu: (e: React.MouseEvent, absPath: string, isFile: boolean) => void
+  root: string
 }): React.JSX.Element {
   return (
     <>
@@ -124,6 +144,7 @@ function Children({
           selected={selected}
           onSelect={onSelect}
           onContextMenu={onContextMenu}
+          root={root}
         />
       ))}
       {node.files.map((file) => (
@@ -180,10 +201,10 @@ export default function Sidebar({
     )
   }
 
-  const onContextMenu = (e: React.MouseEvent, file: ChangedFile): void => {
+  const onContextMenu = (e: React.MouseEvent, absPath: string, isFile: boolean): void => {
     e.preventDefault()
     e.stopPropagation()
-    setMenu({ x: e.clientX, y: e.clientY, file })
+    setMenu({ x: e.clientX, y: e.clientY, absPath, isFile })
   }
 
   const emptyMessage =
@@ -193,7 +214,11 @@ export default function Sidebar({
 
   return (
     <div className="sidebar">
-      <div className="sidebar-header" title={state.root}>
+      <div
+        className="sidebar-header"
+        title={state.root}
+        onContextMenu={(e) => onContextMenu(e, state.root, false)}
+      >
         <span className="sidebar-header-label">
           {state.kind === 'folder' ? state.root : baselineLabel(state)}
         </span>
@@ -222,20 +247,32 @@ export default function Sidebar({
               selected={selected}
               onSelect={onSelect}
               onContextMenu={onContextMenu}
+              root={state.root}
             />
           )
         )}
       </div>
       {menu && (
         <div className="context-menu" style={{ left: menu.x, top: menu.y }}>
+          {menu.isFile && (
+            <div
+              className="context-menu-item"
+              onClick={() => {
+                window.viewmaster.copyPath(menu.absPath)
+                setMenu(null)
+              }}
+            >
+              Copy absolute path
+            </div>
+          )}
           <div
             className="context-menu-item"
             onClick={() => {
-              window.viewmaster.copyPath(menu.file.absPath)
+              window.viewmaster.showInFolder(menu.absPath)
               setMenu(null)
             }}
           >
-            Copy absolute path
+            Open location
           </div>
         </div>
       )}

@@ -8,13 +8,29 @@ import { BINARY_SNIFF_BYTES, MAX_SIZE } from '../git/content'
 const CONCURRENCY = 24
 const MAX_MATCHES_PER_FILE = 50
 const MAX_MATCHES_TOTAL = 500
+const COMPACTION_THRESHOLD = MAX_MATCHES_TOTAL * 4
 const TIME_BUDGET_MS = 10000
 const PREVIEW_MAX_LENGTH = 200
 const PREVIEW_CONTEXT = 60
 
+export function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function compareMatches(a: SearchMatch, b: SearchMatch): number {
+  return a.path.localeCompare(b.path) || a.line - b.line || a.column - b.column
+}
+
 export interface SearchScanOptions {
   signal?: AbortSignal
   startedAt?: number
+  mode?: 'substring' | 'word'
+  caseSensitive?: boolean
+  lineFilter?: (line: string) => boolean
+  /** When set (with mode: 'word'), matches ANY of these words instead of
+   * `query` — each independently \b-bounded. `query` is still required
+   * non-empty (used only for the early-exit check on blank input). */
+  words?: string[]
 }
 
 export interface SearchScanResult {
@@ -50,15 +66,20 @@ function extractPreview(line: string, column: number): { preview: string; previe
 
 /**
  * Scans one file for up to `maxMatches` occurrences of `needle` (already
- * lowercased). `capped` is true when the file had more matches than
- * `maxMatches` allowed for (used by the caller to mark the overall result
- * `truncated`).
+ * lowercased unless `caseSensitive`). `capped` is true when the file had
+ * more matches than `maxMatches` allowed for (used by the caller to mark
+ * the overall result `truncated`). When `lineFilter` is given, a line is
+ * skipped entirely (not counted, not searched) unless the filter accepts it.
  */
 async function scanOneFile(
   absPath: string,
   relPath: string,
   needle: string,
-  maxMatches: number
+  maxMatches: number,
+  mode: 'substring' | 'word',
+  caseSensitive: boolean,
+  lineFilter?: (line: string) => boolean,
+  words?: string[]
 ): Promise<{ matches: SearchMatch[]; capped: boolean }> {
   if (maxMatches <= 0) return { matches: [], capped: false }
 
@@ -79,6 +100,13 @@ async function scanOneFile(
 
   const results: SearchMatch[] = []
   let capped = false
+  const wordPattern =
+    mode === 'word'
+      ? new RegExp(
+          (words && words.length > 0 ? words : [needle]).map((w) => `\\b${escapeRegExp(w)}\\b`).join('|'),
+          caseSensitive ? 'g' : 'gi'
+        )
+      : null
   const stream = createReadStream(absPath, { encoding: 'utf8' })
   const rl = createInterface({
     input: stream,
@@ -87,15 +115,36 @@ async function scanOneFile(
   let lineNumber = 0
   try {
     try {
-      for await (const line of rl) {
+      outer: for await (const line of rl) {
         lineNumber++
-        const column = line.toLowerCase().indexOf(needle)
-        if (column === -1) continue
-        const { preview, previewColumn } = extractPreview(line, column)
-        results.push({ path: relPath, absPath, line: lineNumber, column, preview, previewColumn })
-        if (results.length >= maxMatches) {
-          capped = true
-          break
+        if (lineFilter && !lineFilter(line)) continue
+        if (wordPattern) {
+          wordPattern.lastIndex = 0
+          let match: RegExpExecArray | null
+          while ((match = wordPattern.exec(line)) !== null) {
+            const { preview, previewColumn } = extractPreview(line, match.index)
+            results.push({
+              path: relPath,
+              absPath,
+              line: lineNumber,
+              column: match.index,
+              preview,
+              previewColumn
+            })
+            if (results.length >= maxMatches) {
+              capped = true
+              break outer
+            }
+          }
+        } else {
+          const column = caseSensitive ? line.indexOf(needle) : line.toLowerCase().indexOf(needle)
+          if (column === -1) continue
+          const { preview, previewColumn } = extractPreview(line, column)
+          results.push({ path: relPath, absPath, line: lineNumber, column, preview, previewColumn })
+          if (results.length >= maxMatches) {
+            capped = true
+            break outer
+          }
         }
       }
     } catch {
@@ -131,14 +180,20 @@ async function runWithConcurrency<T>(
  * Live, bounded-concurrency substring search over `paths` (already
  * gitignore-filtered, relative to `root`) — no persistent index or cache;
  * every call reads current on-disk content. Case-insensitive plain
- * substring matching, capped at MAX_MATCHES_PER_FILE per file and
- * MAX_MATCHES_TOTAL overall (soft caps under concurrency — may overshoot
- * slightly before all workers notice; that's fine, this is a safety valve,
- * not an invariant anything else depends on), plus a TIME_BUDGET_MS
- * wall-clock budget as a second, independent guard against a
- * pathologically large folder. `options.signal`, if already aborted or
- * aborted mid-scan, stops dispatching new file scans promptly (a file scan
- * already in flight when the abort happens is not cancelled mid-file).
+ * substring matching, capped at MAX_MATCHES_PER_FILE per file. Every
+ * dispatched file scans to completion (bounded by its own per-file cap
+ * and the TIME_BUDGET_MS wall-clock budget below) — the result is then
+ * sorted by (path, line, column) and sliced to MAX_MATCHES_TOTAL if
+ * longer, so both the match order and which matches survive truncation
+ * are deterministic for a given file set and query, independent of
+ * worker-completion timing. Determinism (both here and when the time
+ * budget below cuts scanning short) assumes `paths` is already sorted
+ * the same way the final result is — true for every current caller,
+ * since `getSearchPaths` sources from `listGitTree`/`listFolderTree`,
+ * which already sort. `options.signal`, if already aborted or
+ * aborted mid-scan, stops dispatching new file scans promptly (a file
+ * scan already in flight when the abort happens is not cancelled
+ * mid-file).
  */
 export async function searchFiles(
   root: string,
@@ -147,7 +202,10 @@ export async function searchFiles(
   options: SearchScanOptions = {}
 ): Promise<SearchScanResult> {
   if (query.trim() === '') return { matches: [], truncated: false }
-  const needle = query.toLowerCase()
+  const caseSensitive = options.caseSensitive ?? false
+  const needle = caseSensitive ? query : query.toLowerCase()
+  const mode = options.mode ?? 'substring'
+  const lineFilter = options.lineFilter
   const matches: SearchMatch[] = []
   let truncated = false
   const startedAt = options.startedAt ?? Date.now()
@@ -155,20 +213,35 @@ export async function searchFiles(
 
   await runWithConcurrency(paths, CONCURRENCY, async (relPath) => {
     if (signal?.aborted) return
-    if (matches.length >= MAX_MATCHES_TOTAL) {
-      truncated = true
-      return
-    }
     if (Date.now() - startedAt > TIME_BUDGET_MS) {
       truncated = true
       return
     }
-    const perFileCap = Math.min(MAX_MATCHES_PER_FILE, MAX_MATCHES_TOTAL - matches.length)
     const absPath = join(root, relPath)
-    const { matches: fileMatches, capped } = await scanOneFile(absPath, relPath, needle, perFileCap)
+    const { matches: fileMatches, capped } = await scanOneFile(
+      absPath,
+      relPath,
+      needle,
+      MAX_MATCHES_PER_FILE,
+      mode,
+      caseSensitive,
+      lineFilter,
+      options.words
+    )
     matches.push(...fileMatches)
     if (capped) truncated = true
+    if (matches.length > COMPACTION_THRESHOLD) {
+      matches.sort(compareMatches)
+      matches.length = MAX_MATCHES_TOTAL
+      truncated = true
+    }
   })
+
+  matches.sort(compareMatches)
+  if (matches.length > MAX_MATCHES_TOTAL) {
+    matches.length = MAX_MATCHES_TOTAL
+    truncated = true
+  }
 
   return { matches, truncated }
 }

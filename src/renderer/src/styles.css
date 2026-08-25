@@ -430,6 +430,14 @@ body {
   color: #d4d4d4;
 }
 
+/* ---- rendered html ---- */
+
+.html-scroll {
+  height: 100%;
+  overflow: auto;
+  background: #ffffff;
+}
+
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -793,4 +801,75 @@ body {
   padding: 8px 10px;
   color: #d7ba7d;
   font-size: 11px;
+}
+
+/* ---- related files pane ---- */
+
+.related-files-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+  background: var(--bg);
+  border-top: 1px solid #333;
+}
+.related-files-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+}
+.related-files-close {
+  background: transparent;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.related-files-close:hover {
+  color: var(--fg);
+}
+.related-files-loading {
+  padding: 8px 10px;
+  color: #777;
+  font-size: 12px;
+}
+.related-files-section {
+  margin-bottom: 4px;
+}
+.related-files-section-title {
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.related-files-empty {
+  padding: 2px 10px 6px;
+  color: #777;
+  font-size: 12px;
+}
+.related-files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.related-files-row {
+  padding: 2px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.related-files-row:hover {
+  background: var(--bg-hover);
 }

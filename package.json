@@ -1,8 +1,8 @@
 {
   "name": "viewmaster",
   "productName": "View Master",
-  "version": "0.4.0",
-  "description": "Read-only desktop viewer for markdown documents and branch diffs",
+  "version": "0.5.1",
+  "description": "Read-only desktop viewer for markdown, images, PDFs, and branch diffs",
   "main": "./out/main/index.js",
   "author": "Bruce Van Horn",
   "license": "MIT",
@@ -33,6 +33,7 @@
     "electron": "^43.1.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "jsdom": "^30.0.1",
     "markdown-it": "^14.3.0",
     "material-icon-theme": "^5.36.1",
     "mermaid": "^11.16.0",

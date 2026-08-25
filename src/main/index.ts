@@ -22,6 +22,10 @@ function sendFindInFiles(): void {
   getMainWindow()?.webContents.send('menu:findInFiles')
 }
 
+function sendRelatedFiles(): void {
+  getMainWindow()?.webContents.send('menu:relatedFiles')
+}
+
 function sendGoBack(): void {
   getMainWindow()?.webContents.send('menu:goBack')
 }
@@ -68,6 +72,11 @@ function buildMenu(): void {
           label: 'Find in Files…',
           accelerator: 'CmdOrCtrl+Shift+F',
           click: () => sendFindInFiles()
+        },
+        {
+          label: 'Related Files…',
+          accelerator: 'CmdOrCtrl+Alt+R',
+          click: () => sendRelatedFiles()
         }
       ]
     },
@@ -127,6 +136,15 @@ function createWindow(): BrowserWindow {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  // Hard boundary against previewed content (e.g. a <form> in a rendered
+  // HTML file) navigating the app window itself away from its own loaded
+  // URL — that would otherwise inherit the full preload IPC bridge. Holds
+  // even if the sanitizer allowlist ever regresses to permit some other
+  // navigation vector.
+  win.webContents.on('will-navigate', (event, url) => {
+    if (url !== win.webContents.getURL()) event.preventDefault()
   })
 
   // Dev/testing hook: auto-open a folder on launch.

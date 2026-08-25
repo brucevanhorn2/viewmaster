@@ -133,6 +133,18 @@ const COMMANDS = {
     console.log('open-path', dir, '→', JSON.stringify(r).slice(0, 500))
   },
 
+  // Native menu accelerators don't reliably reach the app under
+  // xvfb/CDP-driven keyboard events. This sends the exact IPC message a
+  // menu click sends (see src/main/index.ts's send* helpers) directly to
+  // every window, bypassing the native menu/accelerator path entirely.
+  async 'send-ipc'(channel) {
+    if (!app) return console.log('ERROR: launch first')
+    await app.evaluate(({ BrowserWindow }, ch) => {
+      for (const w of BrowserWindow.getAllWindows()) w.webContents.send(ch)
+    }, channel)
+    console.log('send-ipc', channel, '→ sent')
+  },
+
   async quit() {
     if (app) await app.close().catch(() => {})
     app = null
