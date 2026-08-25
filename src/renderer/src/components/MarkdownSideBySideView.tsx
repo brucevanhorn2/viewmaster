@@ -17,19 +17,27 @@ function scrollToId(container: HTMLElement | null, id: string): boolean {
 }
 
 /** Renders one pane's markdown to HTML and runs mermaid over it once mounted. */
-function usePaneHtml(source: string): [string, React.RefObject<HTMLDivElement | null>] {
+function usePaneHtml(
+  source: string,
+  pathKey: string
+): [string, React.RefObject<HTMLDivElement | null>, React.RefObject<string | null>] {
   const ref = useRef<HTMLDivElement>(null)
   const [html, setHtml] = useState('')
+  const htmlForKey = useRef<string | null>(null)
 
   useEffect(() => {
     let stale = false
     void renderMarkdownToHtml(source)
       .then((rendered) => {
-        if (!stale) setHtml(rendered)
+        if (!stale) {
+          htmlForKey.current = pathKey
+          setHtml(rendered)
+        }
       })
       .catch((err: unknown) => {
         if (stale) return
         const message = err instanceof Error ? err.message : String(err)
+        htmlForKey.current = pathKey
         setHtml(
           `<p><em>Markdown rendering failed: ${escape(message)}</em></p><pre><code>${escape(source)}</code></pre>`
         )
@@ -37,7 +45,7 @@ function usePaneHtml(source: string): [string, React.RefObject<HTMLDivElement | 
     return () => {
       stale = true
     }
-  }, [source])
+  }, [source, pathKey])
 
   useEffect(() => {
     const container = ref.current
@@ -45,7 +53,7 @@ function usePaneHtml(source: string): [string, React.RefObject<HTMLDivElement | 
     runMermaidIn(container)
   }, [html])
 
-  return [html, ref]
+  return [html, ref, htmlForKey]
 }
 
 /**
@@ -76,17 +84,11 @@ export default function MarkdownSideBySideView({
   scrollToAnchor: string | null
   onAnchorConsumed: () => void
 }): React.JSX.Element {
-  const [oldHtml, oldRef] = usePaneHtml(baseContent)
-  const [newHtml, newRef] = usePaneHtml(content)
+  const [oldHtml, oldRef] = usePaneHtml(baseContent, absPath)
+  const [newHtml, newRef, newHtmlForPath] = usePaneHtml(content, absPath)
   const oldScrollRef = useRef<HTMLDivElement>(null)
   const newScrollRef = useRef<HTMLDivElement>(null)
   const isSyncingRef = useRef(false)
-  // Tracks which absPath the currently-rendered `newHtml` state actually
-  // belongs to. Since rendering is async, `newHtml` can briefly still hold the
-  // previous document's markup after `absPath` has already switched to a new
-  // file — this ref lets the anchor-scroll effect detect that gap instead of
-  // acting on stale DOM content.
-  const newHtmlForPath = useRef<string | null>(null)
 
   useEffect(() => {
     const oldEl = oldScrollRef.current
@@ -112,13 +114,6 @@ export default function MarkdownSideBySideView({
       newEl.removeEventListener('scroll', onNewScroll)
     }
   }, [])
-
-  // Update the tracking ref whenever newHtml is rendered for the current absPath.
-  useEffect(() => {
-    if (newHtml) {
-      newHtmlForPath.current = absPath
-    }
-  }, [newHtml, absPath])
 
   useEffect(() => {
     if (!scrollToAnchor) return
