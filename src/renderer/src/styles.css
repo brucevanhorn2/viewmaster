@@ -430,6 +430,36 @@ body {
   color: #d4d4d4;
 }
 
+.markdown-sidebyside {
+  height: 100%;
+  display: flex;
+}
+
+.markdown-sidebyside-pane {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.markdown-sidebyside-pane-new {
+  border-left: 1px solid var(--border);
+}
+
+.markdown-sidebyside-pane .markdown-body a {
+  pointer-events: none;
+  cursor: default;
+  text-decoration: none;
+  color: inherit;
+}
+
+.markdown-sidebyside-pane-new .markdown-body a {
+  pointer-events: auto;
+  cursor: pointer;
+  text-decoration: underline;
+  color: var(--accent);
+}
+
 /* ---- rendered html ---- */
 
 .html-scroll {
