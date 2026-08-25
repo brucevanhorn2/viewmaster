@@ -1,5 +1,5 @@
-import { createReadStream } from 'fs'
 import { open, stat } from 'fs/promises'
+import type { FileHandle } from 'fs/promises'
 import { createInterface } from 'readline'
 import { join } from 'path'
 import type { SearchMatch } from '@shared/types'
@@ -80,7 +80,7 @@ async function scanOneFile(
     return { matches: [], capped: false }
   }
 
-  let handle: Awaited<ReturnType<typeof open>>
+  let handle: FileHandle
   try {
     handle = await open(absPath, 'r')
   } catch {
@@ -91,11 +91,19 @@ async function scanOneFile(
     const sniffBuffer = Buffer.alloc(BINARY_SNIFF_BYTES)
     const { bytesRead } = await handle.read(sniffBuffer, 0, BINARY_SNIFF_BYTES, 0)
     if (sniffBuffer.subarray(0, bytesRead).includes(0)) {
-      await handle.close()
+      try {
+        await handle.close()
+      } catch {
+        // Ignore close failure — don't fail the whole search over one file.
+      }
       return { matches: [], capped: false }
     }
   } catch {
-    await handle.close()
+    try {
+      await handle.close()
+    } catch {
+      // Ignore close failure — don't fail the whole search over one file.
+    }
     return { matches: [], capped: false }
   }
 
@@ -108,9 +116,11 @@ async function scanOneFile(
           caseSensitive ? 'g' : 'gi'
         )
       : null
-  // fd ownership transfers to the stream from here (autoClose: true closes it
-  // when scanning ends) — do not call handle.close() on this path.
-  const stream = createReadStream(absPath, { fd: handle.fd, encoding: 'utf8' })
+  // The handle retains fd ownership here (autoClose: false); this reads from
+  // the handle's current position (still 0, since the sniff read above was
+  // positional) and is closed explicitly once scanning ends, in the finally
+  // below.
+  const stream = handle.createReadStream({ encoding: 'utf8', autoClose: false })
   const rl = createInterface({
     input: stream,
     crlfDelay: Infinity
@@ -157,11 +167,11 @@ async function scanOneFile(
   } finally {
     rl.close()
     stream.destroy()
-  }
-  try {
-    await handle.close()
-  } catch {
-    // Ignore if fd already closed by stream or other error
+    try {
+      await handle.close()
+    } catch {
+      // Ignore if fd already closed or other error
+    }
   }
   return { matches: results, capped }
 }
