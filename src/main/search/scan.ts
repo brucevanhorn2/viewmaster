@@ -38,18 +38,6 @@ export interface SearchScanResult {
   truncated: boolean
 }
 
-/** True when the first BINARY_SNIFF_BYTES of `absPath` contain a NUL byte. */
-async function isBinaryFile(absPath: string): Promise<boolean> {
-  const handle = await open(absPath, 'r')
-  try {
-    const buffer = Buffer.alloc(BINARY_SNIFF_BYTES)
-    const { bytesRead } = await handle.read(buffer, 0, BINARY_SNIFF_BYTES, 0)
-    return buffer.subarray(0, bytesRead).includes(0)
-  } finally {
-    await handle.close()
-  }
-}
-
 /**
  * Extracts a display snippet around a match, capped to PREVIEW_MAX_LENGTH.
  * For a line short enough to fit whole, `previewColumn` equals `column`;
@@ -92,9 +80,22 @@ async function scanOneFile(
     return { matches: [], capped: false }
   }
 
+  let handle: Awaited<ReturnType<typeof open>>
   try {
-    if (await isBinaryFile(absPath)) return { matches: [], capped: false }
+    handle = await open(absPath, 'r')
   } catch {
+    return { matches: [], capped: false }
+  }
+
+  try {
+    const sniffBuffer = Buffer.alloc(BINARY_SNIFF_BYTES)
+    const { bytesRead } = await handle.read(sniffBuffer, 0, BINARY_SNIFF_BYTES, 0)
+    if (sniffBuffer.subarray(0, bytesRead).includes(0)) {
+      await handle.close()
+      return { matches: [], capped: false }
+    }
+  } catch {
+    await handle.close()
     return { matches: [], capped: false }
   }
 
@@ -107,7 +108,9 @@ async function scanOneFile(
           caseSensitive ? 'g' : 'gi'
         )
       : null
-  const stream = createReadStream(absPath, { encoding: 'utf8' })
+  // fd ownership transfers to the stream from here (autoClose: true closes it
+  // when scanning ends) — do not call handle.close() on this path.
+  const stream = createReadStream(absPath, { fd: handle.fd, encoding: 'utf8' })
   const rl = createInterface({
     input: stream,
     crlfDelay: Infinity
@@ -154,6 +157,11 @@ async function scanOneFile(
   } finally {
     rl.close()
     stream.destroy()
+  }
+  try {
+    await handle.close()
+  } catch {
+    // Ignore if fd already closed by stream or other error
   }
   return { matches: results, capped }
 }
