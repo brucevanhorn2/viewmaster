@@ -4,6 +4,9 @@ import { renderMarkdownToHtml } from '../markdown/render'
 import { runMermaidIn } from '../markdown/mermaidRunner'
 import { classifyLinkHref } from '../markdown/links'
 
+const escape = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
 /** Scrolls `id`'s element into view inside `container`, if it exists. Returns whether it was found. */
 function scrollToId(container: HTMLElement | null, id: string): boolean {
   if (!container) return false
@@ -20,9 +23,17 @@ function usePaneHtml(source: string): [string, React.RefObject<HTMLDivElement | 
 
   useEffect(() => {
     let stale = false
-    void renderMarkdownToHtml(source).then((rendered) => {
-      if (!stale) setHtml(rendered)
-    })
+    void renderMarkdownToHtml(source)
+      .then((rendered) => {
+        if (!stale) setHtml(rendered)
+      })
+      .catch((err: unknown) => {
+        if (stale) return
+        const message = err instanceof Error ? err.message : String(err)
+        setHtml(
+          `<p><em>Markdown rendering failed: ${escape(message)}</em></p><pre><code>${escape(source)}</code></pre>`
+        )
+      })
     return () => {
       stale = true
     }
@@ -70,6 +81,12 @@ export default function MarkdownSideBySideView({
   const oldScrollRef = useRef<HTMLDivElement>(null)
   const newScrollRef = useRef<HTMLDivElement>(null)
   const isSyncingRef = useRef(false)
+  // Tracks which absPath the currently-rendered `newHtml` state actually
+  // belongs to. Since rendering is async, `newHtml` can briefly still hold the
+  // previous document's markup after `absPath` has already switched to a new
+  // file — this ref lets the anchor-scroll effect detect that gap instead of
+  // acting on stale DOM content.
+  const newHtmlForPath = useRef<string | null>(null)
 
   useEffect(() => {
     const oldEl = oldScrollRef.current
@@ -96,10 +113,22 @@ export default function MarkdownSideBySideView({
     }
   }, [])
 
+  // Update the tracking ref whenever newHtml is rendered for the current absPath.
+  useEffect(() => {
+    if (newHtml) {
+      newHtmlForPath.current = absPath
+    }
+  }, [newHtml, absPath])
+
   useEffect(() => {
     if (!scrollToAnchor) return
+    // Guard against acting on stale DOM: `newHtml` may still hold the previous
+    // document's markup while `absPath` has already moved to the file being
+    // navigated to. Wait until newHtmlForPath confirms the current absPath's
+    // content has actually rendered before attempting the scroll.
+    if (newHtmlForPath.current !== absPath) return
     if (scrollToId(newRef.current, scrollToAnchor)) onAnchorConsumed()
-  }, [scrollToAnchor, newHtml])
+  }, [scrollToAnchor, newHtml, absPath])
 
   const onNewPaneClick = (e: React.MouseEvent): void => {
     const anchor = (e.target as HTMLElement).closest('a')
