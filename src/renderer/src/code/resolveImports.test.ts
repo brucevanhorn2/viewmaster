@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractImportSpecifiers, candidateImportPaths } from './resolveImports'
+import { extractImportSpecifiers, candidateImportPaths, isTsJsExtension } from './resolveImports'
 
 describe('extractImportSpecifiers', () => {
   it('extracts a default import specifier', () => {
@@ -57,5 +57,31 @@ describe('candidateImportPaths', () => {
   it('resolves a parent-directory specifier', () => {
     const candidates = candidateImportPaths('/project/src/components', '../util/helper')
     expect(candidates[0]).toBe('/project/src/util/helper')
+  })
+})
+
+describe('isTsJsExtension', () => {
+  it('accepts standard lowercase TS/JS extensions', () => {
+    expect(isTsJsExtension('/a/b.ts')).toBe(true)
+    expect(isTsJsExtension('/a/b.tsx')).toBe(true)
+    expect(isTsJsExtension('/a/b.d.ts')).toBe(true)
+    expect(isTsJsExtension('/a/b.js')).toBe(true)
+    expect(isTsJsExtension('/a/b.jsx')).toBe(true)
+    expect(isTsJsExtension('/a/b.mjs')).toBe(true)
+    expect(isTsJsExtension('/a/b.cjs')).toBe(true)
+    expect(isTsJsExtension('/a/b.cts')).toBe(true)
+    expect(isTsJsExtension('/a/b.mts')).toBe(true)
+  })
+
+  it('accepts uppercase extensions (case-insensitive)', () => {
+    expect(isTsJsExtension('/a/b.TS')).toBe(true)
+    expect(isTsJsExtension('/a/b.TSX')).toBe(true)
+    expect(isTsJsExtension('/a/b.Js')).toBe(true)
+  })
+
+  it('rejects non-TS/JS extensions', () => {
+    expect(isTsJsExtension('/a/b.css')).toBe(false)
+    expect(isTsJsExtension('/a/b.json')).toBe(false)
+    expect(isTsJsExtension('/a/b')).toBe(false)
   })
 })
