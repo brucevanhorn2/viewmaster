@@ -40,12 +40,17 @@ ever *views* — it never edits your files.
   git-changed keep their status coloring. Opening a folder that isn't a git
   repository always browses — there's nothing "changed" to show without git.
 - File-type icons and status coloring (untracked / modified / staged / committed).
-- Click a **markdown** file → rendered view, with a three-way toggle:
-  **Rendered | Marks | Source**.
+- Click a **markdown** file → rendered view, with a four-way toggle:
+  **Rendered | Marks | Side-by-Side | Source**.
 - **Editor's-marks diff (Marks)** — the branch's changes shown as proofreader's
   marks inline in the *rendered* output: insertions highlighted, deletions
   struck through. Changed code fences and mermaid diagrams appear as the old
   block (struck) followed by the new block.
+- **Side-by-Side diff** — the old and new revisions rendered as two
+  independently-rendered, scroll-synced markdown panes. The old (left) pane's
+  links are inert (a link's target may not exist, or may mean something
+  different, at that revision); the new (right) pane behaves exactly like
+  Rendered mode, with full link interactivity.
 - Click **any other file** → read-only, syntax-highlighted code with line numbers
   (VS Code's Monaco editor), with a **Diff toggle**.
 - Diffs are **side-by-side** by default, with an inline toggle.
@@ -106,8 +111,6 @@ This is a one-time step per machine. Signing and notarization are on the roadmap
 
 ## Roadmap
 
-- Side-by-side rendered old-vs-new markdown as an alternate diff mode
-  ([#11](https://github.com/brucevanhorn2/viewmaster/issues/11)).
 - Code signing + notarization for Gatekeeper-clean, distributable DMGs
   ([#12](https://github.com/brucevanhorn2/viewmaster/issues/12)).
 - Configurable baseline (compare against an arbitrary branch or ref)

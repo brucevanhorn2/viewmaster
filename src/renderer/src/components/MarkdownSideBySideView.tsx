@@ -102,7 +102,17 @@ export default function MarkdownSideBySideView({
       const targetRange = target.scrollHeight - target.clientHeight
       isSyncingRef.current = true
       target.scrollTop = fraction * targetRange
-      isSyncingRef.current = false
+      // The echoed `scroll` event a programmatic scrollTop write triggers on
+      // `target` fires asynchronously (a later task/frame), not
+      // synchronously -- so resetting the guard here would already be too
+      // late to suppress it. Reset on the next animation frame instead, so
+      // the guard is still up when the echo arrives. This matters most for
+      // an in-progress `scrollIntoView({behavior:'smooth'})` on the other
+      // pane: without this, the echo's non-smooth scrollTop write aborts
+      // the smooth scroll before it reaches its target.
+      requestAnimationFrame(() => {
+        isSyncingRef.current = false
+      })
     }
 
     const onOldScroll = (): void => syncFrom(oldEl, newEl)
