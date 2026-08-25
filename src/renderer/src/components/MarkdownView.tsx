@@ -1,11 +1,9 @@
 // src/renderer/src/components/MarkdownView.tsx
 import { useEffect, useRef, useState } from 'react'
-import mermaid from 'mermaid'
-import { renderMarkdown, sanitizeHtml } from '../markdown/render'
+import { renderMarkdown, renderMarkdownToHtml, sanitizeHtml } from '../markdown/render'
+import { runMermaidIn } from '../markdown/mermaidRunner'
 import { composeMarks } from '../markdown/marksDiff'
 import { classifyLinkHref } from '../markdown/links'
-
-mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' })
 
 const escape = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -54,7 +52,7 @@ export default function MarkdownView({
     let stale = false
 
     const render = async (): Promise<string> => {
-      if (baseContent === null) return renderMarkdown(content)
+      if (baseContent === null) return renderMarkdownToHtml(content)
       const [oldHtml, newHtml] = await Promise.all([
         renderMarkdown(baseContent),
         renderMarkdown(content)
@@ -101,13 +99,7 @@ export default function MarkdownView({
   useEffect(() => {
     const container = ref.current
     if (!container || !html) return
-    const nodes = Array.from(container.querySelectorAll<HTMLElement>('pre.mermaid'))
-    if (nodes.length === 0) return
-    mermaid.run({ nodes, suppressErrors: true }).catch(() => {
-      for (const node of nodes) {
-        if (!node.querySelector('svg')) node.classList.add('mermaid-error')
-      }
-    })
+    runMermaidIn(container)
   }, [html])
 
   // Scroll to a heading requested by a cross-document navigation (set by

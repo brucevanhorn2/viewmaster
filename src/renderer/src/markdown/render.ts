@@ -65,3 +65,23 @@ export async function renderMarkdown(src: string): Promise<string> {
   const md = await getMd()
   return sanitizeHtml(md.render(src))
 }
+
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+/**
+ * Renders `src` to sanitized HTML, or a fallback HTML fragment (escaped
+ * error message plus escaped raw source) if rendering throws. Shared by
+ * any single-document rendered view (MarkdownView's plain Rendered mode,
+ * each pane of MarkdownSideBySideView) -- Marks mode's own dual-render-
+ * then-compose fallback chain in MarkdownView.tsx is more involved and
+ * stays there, not routed through this function.
+ */
+export async function renderMarkdownToHtml(src: string): Promise<string> {
+  try {
+    return await renderMarkdown(src)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return `<p><em>Markdown rendering failed: ${escapeHtml(message)}</em></p><pre><code>${escapeHtml(src)}</code></pre>`
+  }
+}
