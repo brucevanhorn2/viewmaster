@@ -6,8 +6,12 @@ import { parseNameStatusZ, parsePorcelainV2 } from './parse'
 
 /**
  * Changed-file set = union of branch commits (base..HEAD), staged, modified,
- * and untracked — with deleted files excluded entirely. A file in several
- * states gets the highest-priority one as primary and the next as secondary.
+ * and untracked — with deleted files excluded entirely for 'merge-base' mode.
+ * For 'custom' baselines, the git diff is a direct tip-to-tip comparison,
+ * so "deletions" represent files that exist on the baseline ref but not
+ * on HEAD, and are intentionally included (they represent real differences).
+ * A file in several states gets the highest-priority one as primary and
+ * the next as secondary.
  */
 export async function collectChanges(
   root: string,
@@ -42,7 +46,8 @@ export async function collectChanges(
     if (diffRes.code !== 0) {
       throw new Error(`git diff failed: ${diffRes.stderr.trim()}`)
     }
-    for (const file of parseNameStatusZ(diffRes.stdout)) {
+    const includeDeletions = baseline.kind === 'custom'
+    for (const file of parseNameStatusZ(diffRes.stdout, includeDeletions)) {
       add(file.path, 'committed')
     }
   }

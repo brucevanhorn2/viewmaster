@@ -160,4 +160,25 @@ describe('collectChanges', () => {
     expect(byPath(files, 'mine-only.txt')).toBeDefined()
     expect(byPath(files, 'sibling-only.txt')).toBeDefined()
   })
+
+  it('excludes files deleted between merge-base and HEAD in merge-base mode (regression)', async () => {
+    await setupBranch()
+    // Commit a file at the fork point that will later be deleted
+    await repo.write('temp.txt', 'temporary\n')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'add temp file')
+    // Later, delete it on the feature branch
+    await rm(join(repo.root, 'temp.txt'))
+    await repo.git('add', 'temp.txt')
+    await repo.git('commit', '-m', 'remove temp file')
+
+    const files = await changes()
+
+    // The deleted file should NOT appear in the changed files list for
+    // merge-base mode, even though it was deleted in a commit between
+    // the merge-base and HEAD. This regression test ensures that the
+    // parseNameStatusZ includeDeletions parameter doesn't leak into
+    // the merge-base code path.
+    expect(byPath(files, 'temp.txt')).toBeUndefined()
+  })
 })
