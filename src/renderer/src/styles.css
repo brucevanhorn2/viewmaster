@@ -157,6 +157,36 @@ body {
   letter-spacing: normal;
 }
 
+.sidebar-header-label-clickable {
+  cursor: pointer;
+}
+
+.sidebar-header-label-clickable:hover {
+  color: var(--fg);
+}
+
+.baseline-picker {
+  flex: 1;
+  min-width: 0;
+}
+
+.baseline-picker-input {
+  width: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.baseline-reset {
+  padding: 3px 8px;
+  flex-shrink: 0;
+}
+
 .sidebar-tree {
   flex: 1;
   overflow-y: auto;

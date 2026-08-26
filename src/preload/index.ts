@@ -19,6 +19,9 @@ const api = {
   openRepo: (root: string): Promise<RepoState> => ipcRenderer.invoke('repo:open', root),
   refreshRepo: (): Promise<RepoState | null> => ipcRenderer.invoke('repo:refresh'),
   setMode: (mode: SidebarMode): Promise<RepoState | null> => ipcRenderer.invoke('mode:set', mode),
+  setCustomBaseline: (ref: string | null): Promise<RepoState | null> =>
+    ipcRenderer.invoke('baseline:setCustom', ref),
+  listRefs: (): Promise<string[]> => ipcRenderer.invoke('git:listRefs'),
   readFile: (absPath: string): Promise<FileContent> => ipcRenderer.invoke('file:read', absPath),
   readBaseFile: (relPath: string): Promise<string> => ipcRenderer.invoke('file:readBase', relPath),
   readResource: (absPath: string): Promise<{ base64: string; mime: string } | null> =>

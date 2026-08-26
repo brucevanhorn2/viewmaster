@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ChangedFile, FileStatus, RepoState, SidebarMode } from '@shared/types'
 import { buildTree, type TreeNode } from '@shared/tree'
 import { fileIconUrl, folderIconUrl } from '../icons'
+import { baselineLabel } from '../code/baselineLabel'
 
 const STATUS_LETTER: Record<FileStatus, string> = {
   untracked: 'U',
@@ -29,19 +30,6 @@ interface ContextMenuState {
 function joinRootPath(root: string, relativePath: string): string {
   const separator = root.includes('\\') ? '\\' : '/'
   return `${root}${separator}${relativePath.replace(/\//g, separator)}`
-}
-
-function baselineLabel(state: RepoState & { kind: 'repo' }): string {
-  const b = state.baseline
-  if (b.kind === 'merge-base') return `${b.branch} vs ${b.defaultBranch}`
-  if (b.kind === 'custom') return `vs ${b.ref}`
-  const reasons: Record<string, string> = {
-    detached: 'detached HEAD',
-    'on-default': `on ${b.branch ?? 'default branch'}`,
-    'no-commits': 'no commits yet',
-    'no-baseline': 'no baseline branch'
-  }
-  return `Working tree changes only (${reasons[b.reason]})`
 }
 
 function FileRow({
@@ -166,14 +154,19 @@ export default function Sidebar({
   state,
   selected,
   onSelect,
-  onSetMode
+  onSetMode,
+  onSetCustomBaseline
 }: {
   state: RepoState
   selected: string | null
   onSelect: (file: ChangedFile) => void
   onSetMode: (mode: SidebarMode) => void
+  onSetCustomBaseline: (ref: string | null) => void
 }): React.JSX.Element {
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
+  const [editingBaseline, setEditingBaseline] = useState(false)
+  const [baselineInput, setBaselineInput] = useState('')
+  const [refSuggestions, setRefSuggestions] = useState<string[]>([])
 
   useEffect(() => {
     if (!menu) return
@@ -208,6 +201,19 @@ export default function Sidebar({
     setMenu({ x: e.clientX, y: e.clientY, absPath, isFile })
   }
 
+  const startEditingBaseline = (): void => {
+    if (state.kind !== 'repo') return
+    setBaselineInput(state.baseline.kind === 'custom' ? state.baseline.ref : '')
+    setEditingBaseline(true)
+    void window.viewmaster.listRefs().then(setRefSuggestions)
+  }
+
+  const commitBaseline = (ref: string): void => {
+    setEditingBaseline(false)
+    const trimmed = ref.trim()
+    onSetCustomBaseline(trimmed === '' ? null : trimmed)
+  }
+
   const emptyMessage =
     state.kind === 'folder' || (state.kind === 'repo' && state.mode === 'browse')
       ? 'No files to show'
@@ -220,9 +226,44 @@ export default function Sidebar({
         title={state.root}
         onContextMenu={(e) => onContextMenu(e, state.root, false)}
       >
-        <span className="sidebar-header-label">
-          {state.kind === 'folder' ? state.root : baselineLabel(state)}
-        </span>
+        {state.kind === 'repo' && editingBaseline ? (
+          <span className="baseline-picker">
+            <input
+              autoFocus
+              className="baseline-picker-input"
+              list="baseline-ref-suggestions"
+              value={baselineInput}
+              placeholder="branch, tag, or commit"
+              onChange={(e) => setBaselineInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitBaseline(baselineInput)
+                if (e.key === 'Escape') setEditingBaseline(false)
+              }}
+              onBlur={() => commitBaseline(baselineInput)}
+            />
+            <datalist id="baseline-ref-suggestions">
+              {refSuggestions.map((ref) => (
+                <option key={ref} value={ref} />
+              ))}
+            </datalist>
+          </span>
+        ) : (
+          <span
+            className={`sidebar-header-label${state.kind === 'repo' ? ' sidebar-header-label-clickable' : ''}`}
+            onClick={state.kind === 'repo' ? startEditingBaseline : undefined}
+          >
+            {state.kind === 'folder' ? state.root : baselineLabel(state.baseline)}
+          </span>
+        )}
+        {state.kind === 'repo' && state.baseline.kind === 'custom' && !editingBaseline && (
+          <button
+            className="toolbar-button baseline-reset"
+            title="Reset to auto-detected baseline"
+            onClick={() => onSetCustomBaseline(null)}
+          >
+            ×
+          </button>
+        )}
         {state.kind === 'repo' && (
           <span className="toolbar-segment">
             {(['changed', 'browse'] as const).map((m) => (

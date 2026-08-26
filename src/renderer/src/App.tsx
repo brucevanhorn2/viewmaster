@@ -81,6 +81,13 @@ export default function App(): React.JSX.Element {
     })
   }, [])
 
+  const setCustomBaseline = useCallback((ref: string | null): void => {
+    void window.viewmaster.setCustomBaseline(ref).then((state) => {
+      if (!state) return
+      setRepo(state)
+    })
+  }, [])
+
   useEffect(() => window.viewmaster.onMenuOpenFolder(openFolder), [openFolder])
 
   // Watcher-driven auto-refresh: update the change list in place. `selected`
@@ -272,6 +279,7 @@ export default function App(): React.JSX.Element {
                 selected={selected?.path ?? null}
                 onSelect={onSidebarSelect}
                 onSetMode={setMode}
+                onSetCustomBaseline={setCustomBaseline}
               />
             </Allotment.Pane>
             <Allotment.Pane preferredSize={220} minSize={80}>
