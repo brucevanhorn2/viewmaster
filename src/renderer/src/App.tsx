@@ -68,6 +68,11 @@ export default function App(): React.JSX.Element {
   const [historyTick, setHistoryTick] = useState(0)
 
   const openFolder = useCallback((root: string): void => {
+    // Nothing from the previous folder is relevant to the new one -- a
+    // complete, unconditional reset (even when reopening the same folder
+    // from Recents) is simplest and correct. See docs/superpowers/specs/
+    // 2026-08-26-monaco-model-disposal-design.md.
+    monaco.editor.getModels().forEach((model) => model.dispose())
     void window.viewmaster.openRepo(root).then((state) => {
       setRepo(state)
       setNavState(initialNavigationState())
