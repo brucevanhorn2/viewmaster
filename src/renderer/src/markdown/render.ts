@@ -66,7 +66,7 @@ export async function renderMarkdown(src: string): Promise<string> {
   return sanitizeHtml(md.render(src))
 }
 
-const escapeHtml = (s: string): string =>
+export const escapeHtml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /**

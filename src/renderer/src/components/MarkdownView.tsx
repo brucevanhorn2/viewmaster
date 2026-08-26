@@ -1,21 +1,10 @@
 // src/renderer/src/components/MarkdownView.tsx
 import { useEffect, useRef, useState } from 'react'
-import { renderMarkdown, renderMarkdownToHtml, sanitizeHtml } from '../markdown/render'
+import { renderMarkdown, renderMarkdownToHtml, sanitizeHtml, escapeHtml } from '../markdown/render'
 import { runMermaidIn } from '../markdown/mermaidRunner'
 import { composeMarks } from '../markdown/marksDiff'
 import { classifyLinkHref } from '../markdown/links'
-
-const escape = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
-/** Scrolls `id`'s element into view inside `container`, if it exists. Returns whether it was found. */
-function scrollToId(container: HTMLElement | null, id: string): boolean {
-  if (!container) return false
-  const target = container.querySelector(`#${CSS.escape(id)}`)
-  if (!target) return false
-  target.scrollIntoView({ behavior: 'smooth' })
-  return true
-}
+import { scrollToId } from '../markdown/scrollToId'
 
 /**
  * Rendered markdown. When `baseContent` is a string (possibly ''), renders
@@ -76,7 +65,7 @@ export default function MarkdownView({
             const plain = await renderMarkdown(content)
             if (!stale) {
               htmlForPath.current = absPath
-              setHtml(`<p><em>Marks unavailable: ${escape(message)}</em></p>${plain}`)
+              setHtml(`<p><em>Marks unavailable: ${escapeHtml(message)}</em></p>${plain}`)
             }
             return
           } catch {
@@ -86,7 +75,7 @@ export default function MarkdownView({
         if (!stale) {
           htmlForPath.current = absPath
           setHtml(
-            `<p><em>Markdown rendering failed: ${escape(message)}</em></p><pre><code>${escape(content)}</code></pre>`
+            `<p><em>Markdown rendering failed: ${escapeHtml(message)}</em></p><pre><code>${escapeHtml(content)}</code></pre>`
           )
         }
       })

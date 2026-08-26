@@ -22,7 +22,11 @@ let queue: Promise<void> = Promise.resolve()
  * not scoped to the container passed in -- a collision causes one diagram
  * to render into the wrong pane, or silently render blank. mermaid.render
  * also mutates global config via processAndSetConfigs, so truly concurrent
- * renders are unsafe independent of id collisions too.
+ * renders are unsafe independent of id collisions too. This serializes
+ * mermaid rendering across every mounted markdown view in the app, not just
+ * within one component -- accepted deliberately, since correctness (no id
+ * collisions/corrupted diagrams) matters more than the render-time cost of
+ * one extra concurrently-open view with diagrams.
  */
 export function runMermaidIn(container: HTMLElement): void {
   const nodes = Array.from(container.querySelectorAll<HTMLElement>('pre.mermaid'))
