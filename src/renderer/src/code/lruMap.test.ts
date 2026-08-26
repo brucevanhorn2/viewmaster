@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { touchKey } from './modelLru'
+import { touchKey } from './lruMap'
 
 describe('touchKey', () => {
   it('does not evict anything while under the cap', () => {
