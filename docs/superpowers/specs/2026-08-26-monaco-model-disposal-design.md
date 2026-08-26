@@ -96,14 +96,29 @@ Two call sites in `CodeView.tsx`:
    check (touch on reuse too, not just on creation) and right after the
    `monaco.editor.createModel(...)` call (touch on creation).
 
-Because the currently-displayed file's own model is always touched (moved to
-most-recently-used) on every render for that file, it can never be the one
-evicted by a same-render `touchModel` call from the import-preload effect —
-eviction only ever removes strictly older entries. An evicted import-preload
-model is not a correctness problem: the existing
-`if (monaco.editor.getModel(uri)) return` check in the import-preload effect
-already handles "does this model still exist" and will simply recreate it on
-next need — a minor performance cost, not a bug.
+**Correction (found during implementation, see the implementation plan's
+Task 2 fix commit):** the paragraph above, as originally written, assumed
+the displayed file's own touch and its import-preload touches happen in the
+same render and so can never reorder relative to each other. That assumption
+is false — the import-preload effect's touches happen *asynchronously*
+(each after `await window.viewmaster.readFile(...)`), strictly after the
+displayed file's own synchronous `[absPath]` touch. This means the displayed
+file's own model routinely ends up as the least-recently-used tracked entry
+relative to its own imports, and a file with enough imports could evict the
+very model the editor is showing — a blank editor pane, reproduced live
+during Task 2's manual verification.
+
+The actual fix: `touchModel`'s eviction never disposes a model that is
+currently attached to an editor (`monaco.editor.ITextModel.isAttachedToEditor()`,
+queried live on every eviction pass, never cached) — such a model is instead
+re-inserted at the most-recently-used end and eviction moves on to the
+next-oldest candidate. This makes `MODEL_CAP` a bound on *evictable* entries
+rather than a hard ceiling (in practice, at most one entry — the one visible
+model — can ever refuse eviction at a time, so the real ceiling is
+`MODEL_CAP + 1`). An evicted import-preload model is still not a correctness
+problem: the existing `if (monaco.editor.getModel(uri)) return` check in the
+import-preload effect already handles "does this model still exist" and will
+simply recreate it on next need — a minor performance cost, not a bug.
 
 **Cap value:** `MODEL_CAP = 60`, a module-level constant in `CodeView.tsx`
 (or wherever the plan's implementer finds cleanest to place it alongside the
