@@ -4,7 +4,8 @@ import type { editor } from 'monaco-editor'
 import * as monaco from 'monaco-editor'
 import '../monacoSetup'
 import { languageForFile } from '../monacoSetup'
-import { extractImportSpecifiers, candidateImportPaths } from '../code/resolveImports'
+import { extractImportSpecifiers, candidateImportPaths, isTsJsExtension } from '../code/resolveImports'
+import { encodeForMonacoPath } from '../code/monacoPath'
 
 export default function CodeView({
   fileName,
@@ -65,7 +66,7 @@ export default function CodeView({
       specifiers.map(async (specifier) => {
         for (const candidate of candidateImportPaths(fromDir, specifier)) {
           if (cancelled) return
-          if (!/\.(ts|tsx|d\.ts|js|jsx|mjs|cjs|cts|mts)$/.test(candidate)) continue
+          if (!isTsJsExtension(candidate)) continue
           const uri = monaco.Uri.file(candidate)
           if (monaco.editor.getModel(uri)) return
           const result = await window.viewmaster.readFile(candidate)
@@ -87,7 +88,7 @@ export default function CodeView({
       height="100%"
       theme="vs-dark"
       language={languageForFile(fileName)}
-      path={absPath}
+      path={encodeForMonacoPath(absPath)}
       keepCurrentModel={true}
       value={content}
       onMount={setEditorInstance}

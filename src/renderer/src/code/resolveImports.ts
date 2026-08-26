@@ -38,6 +38,16 @@ const CANDIDATE_SUFFIXES = [
 ]
 
 /**
+ * True when `path` ends in a recognized TS/JS source extension
+ * (case-insensitive) — used to filter import-preload candidates so a
+ * non-TS/JS resolved path (e.g. `./styles.css`) is never registered as a
+ * 'typescript'/'javascript' Monaco model.
+ */
+export function isTsJsExtension(path: string): boolean {
+  return /\.(ts|tsx|d\.ts|js|jsx|mjs|cjs|cts|mts)$/i.test(path)
+}
+
+/**
  * Joins `dir` and a relative `specifier` (which may contain `.`/`..`
  * segments) into an absolute, forward-slash path. Assumes forward-slash
  * paths throughout, matching this codebase's existing convention — like

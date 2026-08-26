@@ -46,7 +46,9 @@ export default function RelatedFilesPane({
 }): React.JSX.Element {
   const [imports, setImports] = useState<RelatedFile[]>([])
   const [importedBy, setImportedBy] = useState<RelatedFile[]>([])
+  const [importedByTruncated, setImportedByTruncated] = useState(false)
   const [references, setReferences] = useState<RelatedFile[]>([])
+  const [referencesTruncated, setReferencesTruncated] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [language, setLanguage] = useState('plaintext')
@@ -54,7 +56,9 @@ export default function RelatedFilesPane({
   useEffect(() => {
     setImports([])
     setImportedBy([])
+    setImportedByTruncated(false)
     setReferences([])
+    setReferencesTruncated(false)
     setError(null)
     if (!open || !file) return
     let cancelled = false
@@ -82,6 +86,7 @@ export default function RelatedFilesPane({
           if (result.error) throw new Error(result.error)
           if (!cancelled) {
             setImportedBy(aggregateReferences([result.locations], file.absPath))
+            setImportedByTruncated(result.truncated)
           }
         }
 
@@ -123,6 +128,7 @@ export default function RelatedFilesPane({
           if (result.error) throw new Error(result.error)
           if (!cancelled) {
             setReferences(aggregateReferences([result.locations], file.absPath))
+            setReferencesTruncated(result.truncated)
           }
         }
       } catch (err) {
@@ -137,7 +143,11 @@ export default function RelatedFilesPane({
     }
   }, [open, file?.absPath, workspaceRoot])
 
-  const renderSection = (title: string, items: RelatedFile[]): React.JSX.Element => (
+  const renderSection = (
+    title: string,
+    items: RelatedFile[],
+    truncated: boolean = false
+  ): React.JSX.Element => (
     <div className="related-files-section">
       <div className="related-files-section-title">{title}</div>
       {items.length === 0 ? (
@@ -155,6 +165,9 @@ export default function RelatedFilesPane({
             </li>
           ))}
         </ul>
+      )}
+      {truncated && (
+        <div className="related-files-truncated">Showing partial results — some matches may be missing.</div>
       )}
     </div>
   )
@@ -176,8 +189,8 @@ export default function RelatedFilesPane({
       ) : (
         <>
           {supportsImportEdges(language) && renderSection('Imports', imports)}
-          {supportsImportEdges(language) && renderSection('Imported by', importedBy)}
-          {renderSection('References', references)}
+          {supportsImportEdges(language) && renderSection('Imported by', importedBy, importedByTruncated)}
+          {renderSection('References', references, referencesTruncated)}
         </>
       )}
     </div>
