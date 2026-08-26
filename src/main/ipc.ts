@@ -229,11 +229,17 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
 
   ipcMain.handle('baseline:setCustom', async (_e, ref: string | null): Promise<RepoState | null> => {
     if (!session) return null
-    const root = session.root
-    const mode = session.mode
-    session.customBaselineRef = ref
+    const activeSession = session
+    const root = activeSession.root
+    const mode = activeSession.mode
+    const prev = activeSession.customBaselineRef
+    activeSession.customBaselineRef = ref
     const fresh = await computeRepoState(root, mode)
-    if (session?.root !== root || session.mode !== mode) return null // repo switched or mode changed mid-compute — drop stale update
+    // Roll back a bad ref on this session regardless of whether the update below
+    // turns out to be stale — otherwise a failed custom ref sticks forever with no
+    // in-app way to clear it (the Sidebar hides the reset control on error states).
+    if (fresh.kind !== 'repo') activeSession.customBaselineRef = prev
+    if (session !== activeSession || session.mode !== mode) return null // repo switched or mode changed mid-compute — drop stale update
     if (fresh.kind === 'repo') session.baseline = fresh.baseline
     return fresh
   })
