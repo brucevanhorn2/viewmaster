@@ -65,8 +65,9 @@ export function parsePorcelainV2(nulSeparated: string): PorcelainEntry[] {
 }
 
 /**
- * Parse `git diff --name-status -z <base> HEAD` output. Deletions are
- * dropped (spec: deleted files never appear); renames/copies use the new path.
+ * Parse `git diff --name-status -z <base> HEAD` output. Renames/copies use
+ * the new path. Deletions are included (since they may be meaningful for
+ * custom baselines that diff directly against arbitrary refs).
  */
 export function parseNameStatusZ(nulSeparated: string): { path: string }[] {
   const tokens = nulSeparated.split('\0')
@@ -83,7 +84,7 @@ export function parseNameStatusZ(nulSeparated: string): { path: string }[] {
       if (newPath) files.push({ path: newPath })
     } else {
       const path = tokens[i++]
-      if (path && kind !== 'D') files.push({ path })
+      if (path) files.push({ path })
     }
   }
 

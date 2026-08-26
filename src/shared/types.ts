@@ -15,6 +15,7 @@ export interface ChangedFile {
 
 export type BaselineKind =
   | { kind: 'merge-base'; base: string; defaultBranch: string; branch: string }
+  | { kind: 'custom'; ref: string }
   | {
       kind: 'working-only'
       reason: 'detached' | 'on-default' | 'no-commits' | 'no-baseline'

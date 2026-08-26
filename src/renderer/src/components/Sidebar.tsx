@@ -34,6 +34,7 @@ function joinRootPath(root: string, relativePath: string): string {
 function baselineLabel(state: RepoState & { kind: 'repo' }): string {
   const b = state.baseline
   if (b.kind === 'merge-base') return `${b.branch} vs ${b.defaultBranch}`
+  if (b.kind === 'custom') return `vs ${b.ref}`
   const reasons: Record<string, string> = {
     detached: 'detached HEAD',
     'on-default': `on ${b.branch ?? 'default branch'}`,

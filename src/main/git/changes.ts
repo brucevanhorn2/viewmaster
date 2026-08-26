@@ -36,8 +36,9 @@ export async function collectChanges(
     if (entry.modified) add(entry.path, 'modified')
   }
 
-  if (baseline.kind === 'merge-base') {
-    const diffRes = await runGit(root, ['diff', '--name-status', '-z', baseline.base, 'HEAD'])
+  if (baseline.kind === 'merge-base' || baseline.kind === 'custom') {
+    const compareRef = baseline.kind === 'merge-base' ? baseline.base : baseline.ref
+    const diffRes = await runGit(root, ['diff', '--name-status', '-z', compareRef, 'HEAD'])
     if (diffRes.code !== 0) {
       throw new Error(`git diff failed: ${diffRes.stderr.trim()}`)
     }

@@ -84,11 +84,12 @@ describe('parsePorcelainV2', () => {
 })
 
 describe('parseNameStatusZ', () => {
-  it('parses added/modified, drops deletions, uses new path for renames', () => {
+  it('parses added/modified/deleted, uses new path for renames', () => {
     const out = `M${NUL}src/app.ts${NUL}A${NUL}added.ts${NUL}D${NUL}removed.ts${NUL}R100${NUL}old.ts${NUL}renamed.ts${NUL}`
     expect(parseNameStatusZ(out)).toEqual([
       { path: 'src/app.ts' },
       { path: 'added.ts' },
+      { path: 'removed.ts' },
       { path: 'renamed.ts' }
     ])
   })

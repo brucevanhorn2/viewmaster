@@ -135,4 +135,29 @@ describe('collectChanges', () => {
     const files = await changes()
     expect(files.map((f) => f.path)).toEqual(['alpha.txt', 'mid/beta.txt', 'zebra.txt'])
   })
+
+  it('diffs directly against a custom ref, not filtered through a shared merge-base', async () => {
+    await repo.write('base.txt', 'base\n')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'initial')
+    await repo.git('branch', 'mine')
+    await repo.git('checkout', '-b', 'sibling')
+    await repo.write('sibling-only.txt', 'sibling work\n')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'sibling work')
+    await repo.git('checkout', 'mine')
+    await repo.write('mine-only.txt', 'my work\n')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'my work')
+
+    const files = await collectChanges(repo.root, { kind: 'custom', ref: 'sibling' })
+
+    // Diffing 'mine' (HEAD) directly against 'sibling' surfaces BOTH sides'
+    // unique files, since it's a direct tip-to-tip comparison -- a
+    // merge-base comparison (fork point = the 'initial' commit) would only
+    // ever show mine-only.txt, never sibling-only.txt (a file that only
+    // ever existed on a different branch entirely).
+    expect(byPath(files, 'mine-only.txt')).toBeDefined()
+    expect(byPath(files, 'sibling-only.txt')).toBeDefined()
+  })
 })
