@@ -212,4 +212,30 @@ describe('searchFiles', () => {
     })
     expect(matches.map((m) => m.line)).toEqual([1, 3])
   })
+
+  it('scans many files in one call without any uncaught exceptions', async () => {
+    // Regression test for a fd double-close bug: scanOneFile used to share
+    // one fd between a FileHandle and a createReadStream(), and closing both
+    // raced, surfacing as uncaught EBADF exceptions that scale with file
+    // count. Scanning enough files here (~200) makes that race reliably
+    // observable if it regresses.
+    let uncaughtCount = 0
+    const onUncaught = (): void => {
+      uncaughtCount++
+    }
+    process.on('uncaughtException', onUncaught)
+    try {
+      const paths: string[] = []
+      for (let i = 0; i < 200; i++) {
+        const path = `file${i}.txt`
+        await repo.write(path, `needle ${i}\n`)
+        paths.push(path)
+      }
+      const { matches } = await searchFiles(repo.root, paths, 'needle')
+      expect(matches).toHaveLength(200)
+    } finally {
+      process.off('uncaughtException', onUncaught)
+    }
+    expect(uncaughtCount).toBe(0)
+  })
 })

@@ -1,5 +1,5 @@
-import { createReadStream } from 'fs'
 import { open, stat } from 'fs/promises'
+import type { FileHandle } from 'fs/promises'
 import { createInterface } from 'readline'
 import { join } from 'path'
 import type { SearchMatch } from '@shared/types'
@@ -36,18 +36,6 @@ export interface SearchScanOptions {
 export interface SearchScanResult {
   matches: SearchMatch[]
   truncated: boolean
-}
-
-/** True when the first BINARY_SNIFF_BYTES of `absPath` contain a NUL byte. */
-async function isBinaryFile(absPath: string): Promise<boolean> {
-  const handle = await open(absPath, 'r')
-  try {
-    const buffer = Buffer.alloc(BINARY_SNIFF_BYTES)
-    const { bytesRead } = await handle.read(buffer, 0, BINARY_SNIFF_BYTES, 0)
-    return buffer.subarray(0, bytesRead).includes(0)
-  } finally {
-    await handle.close()
-  }
 }
 
 /**
@@ -92,9 +80,30 @@ async function scanOneFile(
     return { matches: [], capped: false }
   }
 
+  let handle: FileHandle
   try {
-    if (await isBinaryFile(absPath)) return { matches: [], capped: false }
+    handle = await open(absPath, 'r')
   } catch {
+    return { matches: [], capped: false }
+  }
+
+  try {
+    const sniffBuffer = Buffer.alloc(BINARY_SNIFF_BYTES)
+    const { bytesRead } = await handle.read(sniffBuffer, 0, BINARY_SNIFF_BYTES, 0)
+    if (sniffBuffer.subarray(0, bytesRead).includes(0)) {
+      try {
+        await handle.close()
+      } catch {
+        // Ignore close failure — don't fail the whole search over one file.
+      }
+      return { matches: [], capped: false }
+    }
+  } catch {
+    try {
+      await handle.close()
+    } catch {
+      // Ignore close failure — don't fail the whole search over one file.
+    }
     return { matches: [], capped: false }
   }
 
@@ -107,7 +116,11 @@ async function scanOneFile(
           caseSensitive ? 'g' : 'gi'
         )
       : null
-  const stream = createReadStream(absPath, { encoding: 'utf8' })
+  // The handle retains fd ownership here (autoClose: false); this reads from
+  // the handle's current position (still 0, since the sniff read above was
+  // positional) and is closed explicitly once scanning ends, in the finally
+  // below.
+  const stream = handle.createReadStream({ encoding: 'utf8', autoClose: false })
   const rl = createInterface({
     input: stream,
     crlfDelay: Infinity
@@ -154,6 +167,11 @@ async function scanOneFile(
   } finally {
     rl.close()
     stream.destroy()
+    try {
+      await handle.close()
+    } catch {
+      // Ignore if fd already closed or other error
+    }
   }
   return { matches: results, capped }
 }
