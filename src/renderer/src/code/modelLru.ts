@@ -1,8 +1,6 @@
 import * as monaco from 'monaco-editor'
 import { touchKey } from './lruMap'
 
-export { touchKey }
-
 const tracked = new Map<string, true>()
 
 /**
