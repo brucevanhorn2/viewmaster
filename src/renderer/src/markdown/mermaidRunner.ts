@@ -41,6 +41,15 @@ export function runMermaidIn(container: HTMLElement): void {
         node.innerHTML = svg
       } catch {
         node.classList.add('mermaid-error')
+      } finally {
+        // styles.css's `pre.mermaid:not([data-processed])` rule hides an
+        // unprocessed node's raw text (color: transparent) while mermaid
+        // works on it. mermaid.run() used to set this attribute itself on
+        // every node it touched, success or failure; this manual
+        // mermaid.render() call doesn't, so it must be set here too --
+        // otherwise a failed render's `.mermaid-error` styling is masked
+        // by the still-active :not([data-processed]) transparency rule.
+        node.setAttribute('data-processed', 'true')
       }
     }
   })
