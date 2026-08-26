@@ -162,11 +162,16 @@ describe('collectChanges', () => {
   })
 
   it('excludes files deleted between merge-base and HEAD in merge-base mode (regression)', async () => {
-    await setupBranch()
-    // Commit a file at the fork point that will later be deleted
+    // Inline variant of setupBranch(): temp.txt must be committed at the
+    // fork point itself (i.e. before `feature` is checked out), otherwise it
+    // never exists in the merge-base tree and `git diff <merge-base> HEAD`
+    // can't emit a record for it either way -- setupBranch() alone commits
+    // only after the checkout, which is why this test was previously vacuous.
+    await repo.write('base.txt', 'base\n')
     await repo.write('temp.txt', 'temporary\n')
     await repo.git('add', '.')
-    await repo.git('commit', '-m', 'add temp file')
+    await repo.git('commit', '-m', 'initial')
+    await repo.git('checkout', '-b', 'feature')
     // Later, delete it on the feature branch
     await rm(join(repo.root, 'temp.txt'))
     await repo.git('add', 'temp.txt')
@@ -174,11 +179,11 @@ describe('collectChanges', () => {
 
     const files = await changes()
 
-    // The deleted file should NOT appear in the changed files list for
-    // merge-base mode, even though it was deleted in a commit between
-    // the merge-base and HEAD. This regression test ensures that the
-    // parseNameStatusZ includeDeletions parameter doesn't leak into
-    // the merge-base code path.
+    // temp.txt genuinely exists at the merge-base (the initial commit) and is
+    // absent from HEAD, so `git diff <merge-base> HEAD` does emit a D record
+    // for it -- this test now actually distinguishes "included" (bug) from
+    // "excluded" (fixed: includeDeletions scoped away from merge-base mode)
+    // behavior, unlike its previous version.
     expect(byPath(files, 'temp.txt')).toBeUndefined()
   })
 })
