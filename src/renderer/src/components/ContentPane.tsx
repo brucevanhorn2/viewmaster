@@ -12,7 +12,7 @@ import ImageView from './ImageView'
 import { rasterDataUrl, svgDataUrl } from '../image/dataUrl'
 import PdfView from './PdfView'
 
-type Mode = 'view' | 'marks' | 'sideBySide' | 'code' | 'diff'
+type Mode = 'view' | 'marks' | 'sideBySideRendered' | 'code' | 'diff'
 
 const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx']
 
@@ -117,7 +117,7 @@ export default function ContentPane({
 
   // Resolve base/compare sides from the selection when diffing.
   useEffect(() => {
-    if (!file || (mode !== 'diff' && mode !== 'marks' && mode !== 'sideBySide')) return
+    if (!file || (mode !== 'diff' && mode !== 'marks' && mode !== 'sideBySideRendered')) return
     let stale = false
     const resolve = async (ref: RevisionRef): Promise<string> => {
       if (ref === 'baseline') return window.viewmaster.readBaseFile(file.path)
@@ -207,7 +207,7 @@ export default function ContentPane({
           onAnchorConsumed={onTargetConsumed}
         />
       )
-  } else if (mode === 'sideBySide' && isMarkdown(file.path)) {
+  } else if (mode === 'sideBySideRendered' && isMarkdown(file.path)) {
     body =
       baseContent === null || compareContent === null ? (
         <Placeholder title="Loading…" />
@@ -291,7 +291,7 @@ export default function ContentPane({
             </span>
           ) : showToolbarToggles && isMarkdown(file.path) ? (
             <span className="toolbar-segment">
-              {(['view', 'marks', 'sideBySide', 'diff'] as const).map((m) => (
+              {(['view', 'marks', 'sideBySideRendered', 'diff'] as const).map((m) => (
                 <button
                   key={m}
                   className={`toolbar-button${mode === m ? ' active' : ''}`}
@@ -301,7 +301,7 @@ export default function ContentPane({
                     ? 'Rendered'
                     : m === 'marks'
                       ? 'Marks'
-                      : m === 'sideBySide'
+                      : m === 'sideBySideRendered'
                         ? 'Side-by-Side'
                         : 'Source'}
                 </button>
