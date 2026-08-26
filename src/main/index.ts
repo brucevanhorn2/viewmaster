@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, dialog, shell } from 'electron'
 import { join } from 'path'
 import { registerIpc, disposeIpc } from './ipc'
 import { getRecentFolders, getWindowBounds, setWindowBounds } from './store'
+import { getPathArgFromArgv } from './argv'
 import icon from '../../resources/icon.png?asset'
 
 // The single app window. Resolved at *use* time everywhere (menu clicks,
@@ -147,8 +148,13 @@ function createWindow(): BrowserWindow {
     if (url !== win.webContents.getURL()) event.preventDefault()
   })
 
-  // Dev/testing hook: auto-open a folder on launch.
-  const autoOpen = process.env['VIEWMASTER_OPEN']
+  // Auto-open a folder on launch: VIEWMASTER_OPEN (dev/testing convenience)
+  // or a CLI path argument (e.g. `viewmaster /some/path`, or an LLM telling
+  // itself to open its own working folder) -- both funnel through the same
+  // sendOpenFolder path the "Open Recent" menu already uses, so an invalid
+  // path gets the same existing error-state handling openRepo already has,
+  // no new validation needed here.
+  const autoOpen = process.env['VIEWMASTER_OPEN'] ?? getPathArgFromArgv(process.argv, app.isPackaged)
   if (autoOpen) {
     win.webContents.on('did-finish-load', () => sendOpenFolder(autoOpen))
   }
