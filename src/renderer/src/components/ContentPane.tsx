@@ -160,6 +160,43 @@ export default function ContentPane({
   let body: React.JSX.Element
   if (!content) {
     body = <Placeholder title="Loading…" />
+  } else if (!isSvg(file.path) && mode === 'diff') {
+    // A missing current-content file (deleted relative to whatever baseline
+    // is active -- the default merge-base or a custom ref, issue #13) still
+    // has meaningful base/compare content to diff, resolved independently
+    // of readFile above -- render that deletion diff instead of falling
+    // into the "File not found" branch below. Excluded for SVG, which has
+    // no diff-mode UI path of its own (this branch runs before content.kind
+    // is checked at all, purely on mode, so it must stay narrow to modes
+    // that never need content.content directly).
+    body =
+      baseContent === null || compareContent === null ? (
+        <Placeholder title="Loading diff…" />
+      ) : (
+        <DiffView
+          fileName={fileName}
+          original={baseContent}
+          modified={compareContent}
+          sideBySide={sideBySide}
+        />
+      )
+  } else if (!isSvg(file.path) && mode === 'marks' && isMarkdown(file.path)) {
+    // Same reasoning as the diff branch above -- a deleted markdown file's
+    // Marks view is meaningful (all-removed) even with no current content.
+    body =
+      baseContent === null || compareContent === null ? (
+        <Placeholder title="Loading marks…" />
+      ) : (
+        <MarkdownView
+          content={compareContent}
+          baseContent={baseContent}
+          absPath={file.absPath}
+          workspaceRoot={workspaceRoot}
+          onNavigate={onMarkdownNavigate}
+          scrollToAnchor={anchorTarget}
+          onAnchorConsumed={onTargetConsumed}
+        />
+      )
   } else if (content.kind === 'image') {
     body = <ImageView src={rasterDataUrl(content.mime, content.base64)} />
   } else if (content.kind === 'binary') {
@@ -179,33 +216,6 @@ export default function ContentPane({
     body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} />
   } else if (isSvg(file.path)) {
     body = <ImageView src={svgDataUrl(content.content)} />
-  } else if (mode === 'diff') {
-    body =
-      baseContent === null || compareContent === null ? (
-        <Placeholder title="Loading diff…" />
-      ) : (
-        <DiffView
-          fileName={fileName}
-          original={baseContent}
-          modified={compareContent}
-          sideBySide={sideBySide}
-        />
-      )
-  } else if (mode === 'marks' && isMarkdown(file.path)) {
-    body =
-      baseContent === null || compareContent === null ? (
-        <Placeholder title="Loading marks…" />
-      ) : (
-        <MarkdownView
-          content={compareContent}
-          baseContent={baseContent}
-          absPath={file.absPath}
-          workspaceRoot={workspaceRoot}
-          onNavigate={onMarkdownNavigate}
-          scrollToAnchor={anchorTarget}
-          onAnchorConsumed={onTargetConsumed}
-        />
-      )
   } else if (mode === 'code' && isMarkdown(file.path)) {
     body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} revealLine={lineTarget} />
   } else if (isMarkdown(file.path)) {
@@ -234,7 +244,13 @@ export default function ContentPane({
     body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} revealLine={lineTarget} />
   }
 
-  const showToolbarToggles = content?.kind === 'text'
+  // A 'missing' file (deleted relative to whatever baseline is active) also
+  // gets the toolbar: its Diff/Marks toggle is meaningful (see the
+  // deletion-diff branches above), and clicking any of the other,
+  // content-dependent toggles for it just lands back on the "File not
+  // found" placeholder -- safe, not a crash, since those modes still fall
+  // through to the content.kind === 'missing' branch above.
+  const showToolbarToggles = content?.kind === 'text' || content?.kind === 'missing'
 
   return (
     <div className="content-pane">
