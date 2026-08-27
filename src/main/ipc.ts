@@ -235,12 +235,21 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     const prev = activeSession.customBaselineRef
     activeSession.customBaselineRef = ref
     const fresh = await computeRepoState(root, mode)
-    // Roll back a bad ref on this session regardless of whether the update below
-    // turns out to be stale — otherwise a failed custom ref sticks forever with no
-    // in-app way to clear it (the Sidebar hides the reset control on error states).
-    if (fresh.kind !== 'repo') activeSession.customBaselineRef = prev
-    if (session !== activeSession || session.mode !== mode) return null // repo switched or mode changed mid-compute — drop stale update
-    if (fresh.kind === 'repo') session.baseline = fresh.baseline
+    // Stale if the repo switched, the mode changed, or a later call to this
+    // same handler (a different ref) already changed customBaselineRef out
+    // from under this one mid-compute -- checked against `ref`, the value
+    // this call itself set, before either rolling back or committing below,
+    // so a stale response never undoes a newer call's still-in-progress or
+    // already-applied change.
+    const stillOurs = session === activeSession && session.mode === mode && session.customBaselineRef === ref
+    if (!stillOurs) return null
+    // Roll back a bad ref so it doesn't stick forever with no in-app way to
+    // clear it (the Sidebar hides the reset control on error states).
+    if (fresh.kind !== 'repo') {
+      session.customBaselineRef = prev
+      return fresh
+    }
+    session.baseline = fresh.baseline
     return fresh
   })
 

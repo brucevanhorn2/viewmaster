@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangedFile, FileStatus, RepoState, SidebarMode } from '@shared/types'
 import { buildTree, type TreeNode } from '@shared/tree'
 import { fileIconUrl, folderIconUrl } from '../icons'
@@ -167,6 +167,11 @@ export default function Sidebar({
   const [editingBaseline, setEditingBaseline] = useState(false)
   const [baselineInput, setBaselineInput] = useState('')
   const [refSuggestions, setRefSuggestions] = useState<string[]>([])
+  // Removing the still-focused input from the DOM (below, via
+  // setEditingBaseline(false)) synchronously fires its own onBlur -- this
+  // flag lets Escape suppress that blur's commit so Escape truly cancels
+  // instead of committing whatever was typed.
+  const cancelingBaselineEditRef = useRef(false)
 
   useEffect(() => {
     if (!menu) return
@@ -237,9 +242,18 @@ export default function Sidebar({
               onChange={(e) => setBaselineInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') commitBaseline(baselineInput)
-                if (e.key === 'Escape') setEditingBaseline(false)
+                if (e.key === 'Escape') {
+                  cancelingBaselineEditRef.current = true
+                  setEditingBaseline(false)
+                }
               }}
-              onBlur={() => commitBaseline(baselineInput)}
+              onBlur={() => {
+                if (cancelingBaselineEditRef.current) {
+                  cancelingBaselineEditRef.current = false
+                  return
+                }
+                commitBaseline(baselineInput)
+              }}
             />
             <datalist id="baseline-ref-suggestions">
               {refSuggestions.map((ref) => (
