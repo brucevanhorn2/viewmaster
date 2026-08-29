@@ -161,6 +161,16 @@ describe('collectChanges', () => {
     expect(byPath(files, 'sibling-only.txt')).toBeDefined()
   })
 
+  it('rejects a custom ref that looks like a git option instead of passing it through', async () => {
+    await repo.write('base.txt', 'base\n')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'initial')
+
+    await expect(collectChanges(repo.root, { kind: 'custom', ref: '--upload-pack=evil' })).rejects.toThrow(
+      'invalid ref'
+    )
+  })
+
   it('excludes files deleted between merge-base and HEAD in merge-base mode (regression)', async () => {
     // Inline variant of setupBranch(): temp.txt must be committed at the
     // fork point itself (i.e. before `feature` is checked out), otherwise it

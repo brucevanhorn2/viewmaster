@@ -42,6 +42,12 @@ export async function collectChanges(
 
   if (baseline.kind === 'merge-base' || baseline.kind === 'custom') {
     const compareRef = baseline.kind === 'merge-base' ? baseline.base : baseline.ref
+    // A user-typed custom ref reaches this call unvalidated -- one starting
+    // with '-' would otherwise be parsed as a git option instead of a
+    // revision. Reject it here rather than letting git guess.
+    if (compareRef.startsWith('-')) {
+      throw new Error(`invalid ref: ${compareRef}`)
+    }
     const diffRes = await runGit(root, ['diff', '--name-status', '-z', compareRef, 'HEAD'])
     if (diffRes.code !== 0) {
       throw new Error(`git diff failed: ${diffRes.stderr.trim()}`)
