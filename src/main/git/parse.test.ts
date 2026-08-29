@@ -93,6 +93,16 @@ describe('parseNameStatusZ', () => {
     ])
   })
 
+  it('includes deletions when includeDeletions: true', () => {
+    const out = `M${NUL}src/app.ts${NUL}A${NUL}added.ts${NUL}D${NUL}removed.ts${NUL}R100${NUL}old.ts${NUL}renamed.ts${NUL}`
+    expect(parseNameStatusZ(out, true)).toEqual([
+      { path: 'src/app.ts' },
+      { path: 'added.ts' },
+      { path: 'removed.ts' },
+      { path: 'renamed.ts' }
+    ])
+  })
+
   it('handles empty input', () => {
     expect(parseNameStatusZ('')).toEqual([])
   })

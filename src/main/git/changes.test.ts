@@ -135,4 +135,65 @@ describe('collectChanges', () => {
     const files = await changes()
     expect(files.map((f) => f.path)).toEqual(['alpha.txt', 'mid/beta.txt', 'zebra.txt'])
   })
+
+  it('diffs directly against a custom ref, not filtered through a shared merge-base', async () => {
+    await repo.write('base.txt', 'base\n')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'initial')
+    await repo.git('branch', 'mine')
+    await repo.git('checkout', '-b', 'sibling')
+    await repo.write('sibling-only.txt', 'sibling work\n')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'sibling work')
+    await repo.git('checkout', 'mine')
+    await repo.write('mine-only.txt', 'my work\n')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'my work')
+
+    const files = await collectChanges(repo.root, { kind: 'custom', ref: 'sibling' })
+
+    // Diffing 'mine' (HEAD) directly against 'sibling' surfaces BOTH sides'
+    // unique files, since it's a direct tip-to-tip comparison -- a
+    // merge-base comparison (fork point = the 'initial' commit) would only
+    // ever show mine-only.txt, never sibling-only.txt (a file that only
+    // ever existed on a different branch entirely).
+    expect(byPath(files, 'mine-only.txt')).toBeDefined()
+    expect(byPath(files, 'sibling-only.txt')).toBeDefined()
+  })
+
+  it('rejects a custom ref that looks like a git option instead of passing it through', async () => {
+    await repo.write('base.txt', 'base\n')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'initial')
+
+    await expect(collectChanges(repo.root, { kind: 'custom', ref: '--upload-pack=evil' })).rejects.toThrow(
+      'invalid ref'
+    )
+  })
+
+  it('excludes files deleted between merge-base and HEAD in merge-base mode (regression)', async () => {
+    // Inline variant of setupBranch(): temp.txt must be committed at the
+    // fork point itself (i.e. before `feature` is checked out), otherwise it
+    // never exists in the merge-base tree and `git diff <merge-base> HEAD`
+    // can't emit a record for it either way -- setupBranch() alone commits
+    // only after the checkout, which is why this test was previously vacuous.
+    await repo.write('base.txt', 'base\n')
+    await repo.write('temp.txt', 'temporary\n')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'initial')
+    await repo.git('checkout', '-b', 'feature')
+    // Later, delete it on the feature branch
+    await rm(join(repo.root, 'temp.txt'))
+    await repo.git('add', 'temp.txt')
+    await repo.git('commit', '-m', 'remove temp file')
+
+    const files = await changes()
+
+    // temp.txt genuinely exists at the merge-base (the initial commit) and is
+    // absent from HEAD, so `git diff <merge-base> HEAD` does emit a D record
+    // for it -- this test now actually distinguishes "included" (bug) from
+    // "excluded" (fixed: includeDeletions scoped away from merge-base mode)
+    // behavior, unlike its previous version.
+    expect(byPath(files, 'temp.txt')).toBeUndefined()
+  })
 })

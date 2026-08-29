@@ -122,6 +122,18 @@ describe('overlayStatus', () => {
       { path: 'b.txt', absPath: '/r/b.txt', status: 'unchanged' }
     ])
   })
+
+  it('appends a changed path absent from allPaths instead of dropping it', () => {
+    // A file deleted relative to a custom baseline (issue #13) never
+    // appears in a current-HEAD listing like listGitTree's, but is still a
+    // real diff entry collectChanges reports -- it must survive the merge.
+    const changed = [{ path: 'gone.txt', absPath: '/r/gone.txt', status: 'committed' as const }]
+
+    expect(overlayStatus('/r', ['a.txt'], changed)).toEqual([
+      { path: 'a.txt', absPath: '/r/a.txt', status: 'unchanged' },
+      { path: 'gone.txt', absPath: '/r/gone.txt', status: 'committed' }
+    ])
+  })
 })
 
 describe('browseFiles', () => {
@@ -151,5 +163,20 @@ describe('browseFiles', () => {
       { path: 'untouched.txt', absPath: join(repo.root, 'untouched.txt'), status: 'unchanged' },
       { path: 'untracked.txt', absPath: join(repo.root, 'untracked.txt'), status: 'untracked' }
     ])
+  })
+
+  it('includes a file deleted relative to a custom baseline (regression)', async () => {
+    await repo.write('gone.txt', 'still here at v1')
+    await repo.write('stays.txt', 'unrelated')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'v1')
+    await repo.git('tag', 'v1')
+    await repo.git('rm', 'gone.txt')
+    await repo.git('commit', '-m', 'remove gone.txt')
+
+    const files = await browseFiles(repo.root, { kind: 'custom', ref: 'v1' })
+
+    expect(files.map((f) => f.path)).toContain('gone.txt')
+    expect(files.find((f) => f.path === 'gone.txt')?.status).toBe('committed')
   })
 })

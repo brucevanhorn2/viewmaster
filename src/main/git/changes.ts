@@ -6,8 +6,12 @@ import { parseNameStatusZ, parsePorcelainV2 } from './parse'
 
 /**
  * Changed-file set = union of branch commits (base..HEAD), staged, modified,
- * and untracked — with deleted files excluded entirely. A file in several
- * states gets the highest-priority one as primary and the next as secondary.
+ * and untracked — with deleted files excluded entirely for 'merge-base' mode.
+ * For 'custom' baselines, the git diff is a direct tip-to-tip comparison,
+ * so "deletions" represent files that exist on the baseline ref but not
+ * on HEAD, and are intentionally included (they represent real differences).
+ * A file in several states gets the highest-priority one as primary and
+ * the next as secondary.
  */
 export async function collectChanges(
   root: string,
@@ -36,12 +40,20 @@ export async function collectChanges(
     if (entry.modified) add(entry.path, 'modified')
   }
 
-  if (baseline.kind === 'merge-base') {
-    const diffRes = await runGit(root, ['diff', '--name-status', '-z', baseline.base, 'HEAD'])
+  if (baseline.kind === 'merge-base' || baseline.kind === 'custom') {
+    const compareRef = baseline.kind === 'merge-base' ? baseline.base : baseline.ref
+    // A user-typed custom ref reaches this call unvalidated -- one starting
+    // with '-' would otherwise be parsed as a git option instead of a
+    // revision. Reject it here rather than letting git guess.
+    if (compareRef.startsWith('-')) {
+      throw new Error(`invalid ref: ${compareRef}`)
+    }
+    const diffRes = await runGit(root, ['diff', '--name-status', '-z', compareRef, 'HEAD'])
     if (diffRes.code !== 0) {
       throw new Error(`git diff failed: ${diffRes.stderr.trim()}`)
     }
-    for (const file of parseNameStatusZ(diffRes.stdout)) {
+    const includeDeletions = baseline.kind === 'custom'
+    for (const file of parseNameStatusZ(diffRes.stdout, includeDeletions)) {
       add(file.path, 'committed')
     }
   }

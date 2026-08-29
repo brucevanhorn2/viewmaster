@@ -39,6 +39,10 @@ interface Session {
   // pre-change data once it resolves — comparing the generation it started
   // with against the current one detects that race (see search:query).
   searchGeneration: number
+  // Session-only override for the "changed files" baseline (issue #13) --
+  // never persisted, always reset to auto-detection when a fresh session is
+  // created (openRepo). null means "use resolveBaseline() as normal."
+  customBaselineRef: string | null
 }
 
 let session: Session | null = null
@@ -121,7 +125,8 @@ async function computeRepoState(
   }
 
   try {
-    const baseline = await resolveBaseline(gitRoot)
+    const customRef = session?.customBaselineRef
+    const baseline: BaselineKind = customRef ? { kind: 'custom', ref: customRef } : await resolveBaseline(gitRoot)
     if (mode === 'changed') {
       const files = await collectChanges(gitRoot, baseline)
       return { kind: 'repo', root: gitRoot, baseline, mode, files }
@@ -183,7 +188,8 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
       watcher,
       recorder,
       searchPaths: null,
-      searchGeneration: 0
+      searchGeneration: 0,
+      customBaselineRef: null
     }
   }
 
@@ -213,12 +219,60 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
   ipcMain.handle('mode:set', async (_e, mode: SidebarMode): Promise<RepoState | null> => {
     if (!session) return null
     const root = session.root
+    const customRef = session.customBaselineRef
     session.mode = mode
     setFolderMode(root, mode)
     const fresh = await computeRepoState(root, mode)
-    if (session?.root !== root || session.mode !== mode) return null // repo switched or mode changed again mid-compute — drop stale update
+    // Stale if the repo switched, the mode changed again, or a concurrent
+    // baseline:setCustom call already changed customBaselineRef mid-compute
+    // -- `fresh` reflects whatever ref was active when computeRepoState
+    // read it, so committing it here would stomp that newer call's result.
+    if (session?.root !== root || session.mode !== mode || session.customBaselineRef !== customRef) return null
     if (fresh.kind === 'repo') session.baseline = fresh.baseline
     return fresh
+  })
+
+  ipcMain.handle('baseline:setCustom', async (_e, ref: string | null): Promise<RepoState | null> => {
+    if (!session) return null
+    const activeSession = session
+    const root = activeSession.root
+    const mode = activeSession.mode
+    const prev = activeSession.customBaselineRef
+    activeSession.customBaselineRef = ref
+    const fresh = await computeRepoState(root, mode)
+    // Stale if the repo switched, the mode changed, or a later call to this
+    // same handler (a different ref) already changed customBaselineRef out
+    // from under this one mid-compute -- checked against `ref`, the value
+    // this call itself set, before either rolling back or committing below,
+    // so a stale response never undoes a newer call's still-in-progress or
+    // already-applied change.
+    const stillOurs = session === activeSession && session.mode === mode && session.customBaselineRef === ref
+    if (!stillOurs) return null
+    // Roll back a bad ref so it doesn't stick forever with no in-app way to
+    // clear it (the Sidebar hides the reset control on error states).
+    if (fresh.kind !== 'repo') {
+      session.customBaselineRef = prev
+      return fresh
+    }
+    session.baseline = fresh.baseline
+    return fresh
+  })
+
+  ipcMain.handle('git:listRefs', async (): Promise<string[]> => {
+    if (!session) return []
+    const [branches, tags] = await Promise.all([
+      runGit(session.root, ['branch', '-a', '--format=%(refname:short)']),
+      runGit(session.root, ['tag'])
+    ])
+    const branchNames =
+      branches.code === 0
+        ? branches.stdout
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line !== '' && line !== 'origin/HEAD')
+        : []
+    const tagNames = tags.code === 0 ? tags.stdout.split('\n').map((line) => line.trim()).filter(Boolean) : []
+    return [...new Set([...branchNames, ...tagNames])]
   })
 
   ipcMain.handle('file:read', (_e, absPath: string): Promise<FileContent> => readCurrentFile(absPath))
@@ -228,7 +282,7 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     const { root, baseline } = session
     // In working-only mode diff against HEAD (if any) so staged/modified
     // files still have a meaningful old side; untracked paths yield ''.
-    const base = baseline.kind === 'merge-base' ? baseline.base : 'HEAD'
+    const base = baseline.kind === 'merge-base' ? baseline.base : baseline.kind === 'custom' ? baseline.ref : 'HEAD'
     return readBaseFile(root, base, relPath)
   })
 

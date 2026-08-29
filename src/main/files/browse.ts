@@ -79,13 +79,19 @@ export async function listGitTree(root: string): Promise<string[]> {
 
 /**
  * Merge a full path listing with the changed-file set: changed paths keep
- * their real status, everything else is 'unchanged'.
+ * their real status, everything else is 'unchanged'. A changed path absent
+ * from `allPaths` -- e.g. one deleted relative to a custom baseline
+ * (issue #13), which never appears in a current-HEAD listing -- is appended
+ * rather than dropped, since it's still a real, meaningful diff entry.
  */
 export function overlayStatus(root: string, allPaths: string[], changed: ChangedFile[]): ChangedFile[] {
   const changedByPath = new Map(changed.map((f) => [f.path, f]))
-  return allPaths
-    .map((path) => changedByPath.get(path) ?? { path, absPath: join(root, path), status: 'unchanged' as const })
-    .sort((a, b) => a.path.localeCompare(b.path))
+  const allPathsSet = new Set(allPaths)
+  const overlaid = allPaths.map(
+    (path) => changedByPath.get(path) ?? { path, absPath: join(root, path), status: 'unchanged' as const }
+  )
+  const changedOnly = changed.filter((f) => !allPathsSet.has(f.path))
+  return [...overlaid, ...changedOnly].sort((a, b) => a.path.localeCompare(b.path))
 }
 
 /**
