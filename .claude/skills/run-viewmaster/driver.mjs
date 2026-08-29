@@ -168,7 +168,15 @@ const stdin = fs.createReadStream(null, { fd: fs.openSync('/dev/stdin', 'r') })
 const rl = readline.createInterface({ input: stdin, output: process.stdout, prompt: 'driver> ' })
 
 rl.on('line', async (line) => {
-  const [cmd, ...rest] = line.trim().split(/\s+/)
+  // Splitting on the first space only (not tokenizing the whole line) keeps
+  // any whitespace inside the argument itself intact -- e.g. a JSON payload
+  // with multiple consecutive spaces in a string value, or a path with a
+  // double space, previously got silently collapsed by split(/\s+/) +
+  // join(' ') before the command ever saw it.
+  const trimmed = line.trim()
+  const spaceIdx = trimmed.indexOf(' ')
+  const cmd = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx)
+  const rest = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim()
   if (!cmd) return rl.prompt()
   const fn = COMMANDS[cmd]
   if (!fn) {
@@ -176,7 +184,7 @@ rl.on('line', async (line) => {
     return rl.prompt()
   }
   try {
-    await fn(rest.join(' '))
+    await fn(rest)
   } catch (e) {
     console.log('ERROR:', e.message)
   }
