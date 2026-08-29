@@ -160,15 +160,19 @@ export default function ContentPane({
   let body: React.JSX.Element
   if (!content) {
     body = <Placeholder title="Loading…" />
-  } else if (!isSvg(file.path) && mode === 'diff') {
+  } else if (
+    !isSvg(file.path) &&
+    mode === 'diff' &&
+    (content.kind === 'text' || content.kind === 'missing')
+  ) {
     // A missing current-content file (deleted relative to whatever baseline
     // is active -- the default merge-base or a custom ref, issue #13) still
     // has meaningful base/compare content to diff, resolved independently
     // of readFile above -- render that deletion diff instead of falling
-    // into the "File not found" branch below. Excluded for SVG, which has
-    // no diff-mode UI path of its own (this branch runs before content.kind
-    // is checked at all, purely on mode, so it must stay narrow to modes
-    // that never need content.content directly).
+    // into the "File not found" branch below. Scoped to 'text'/'missing'
+    // (and excluded for SVG) so image/binary/pdf/too-large content -- which
+    // this branch runs ahead of and would otherwise shadow -- still reaches
+    // its own viewer even when a non-default revision has forced diff mode.
     body =
       baseContent === null || compareContent === null ? (
         <Placeholder title="Loading diff…" />
@@ -180,7 +184,12 @@ export default function ContentPane({
           sideBySide={sideBySide}
         />
       )
-  } else if (!isSvg(file.path) && mode === 'marks' && isMarkdown(file.path)) {
+  } else if (
+    !isSvg(file.path) &&
+    mode === 'marks' &&
+    isMarkdown(file.path) &&
+    (content.kind === 'text' || content.kind === 'missing')
+  ) {
     // Same reasoning as the diff branch above -- a deleted markdown file's
     // Marks view is meaningful (all-removed) even with no current content.
     body =

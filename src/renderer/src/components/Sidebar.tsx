@@ -169,9 +169,9 @@ export default function Sidebar({
   const [refSuggestions, setRefSuggestions] = useState<string[]>([])
   // Removing the still-focused input from the DOM (below, via
   // setEditingBaseline(false)) synchronously fires its own onBlur -- this
-  // flag lets Escape suppress that blur's commit so Escape truly cancels
-  // instead of committing whatever was typed.
-  const cancelingBaselineEditRef = useRef(false)
+  // flag lets a key handler that already closed the editor (Enter's commit,
+  // Escape's cancel) suppress that blur's redundant/unwanted commit.
+  const closingBaselineEditRef = useRef(false)
 
   useEffect(() => {
     if (!menu) return
@@ -241,15 +241,18 @@ export default function Sidebar({
               placeholder="branch, tag, or commit"
               onChange={(e) => setBaselineInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') commitBaseline(baselineInput)
+                if (e.key === 'Enter') {
+                  closingBaselineEditRef.current = true
+                  commitBaseline(baselineInput)
+                }
                 if (e.key === 'Escape') {
-                  cancelingBaselineEditRef.current = true
+                  closingBaselineEditRef.current = true
                   setEditingBaseline(false)
                 }
               }}
               onBlur={() => {
-                if (cancelingBaselineEditRef.current) {
-                  cancelingBaselineEditRef.current = false
+                if (closingBaselineEditRef.current) {
+                  closingBaselineEditRef.current = false
                   return
                 }
                 commitBaseline(baselineInput)
