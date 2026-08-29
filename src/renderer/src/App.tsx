@@ -75,6 +75,11 @@ export default function App(): React.JSX.Element {
   }, [])
 
   const openFile = useCallback((payload: { root: string; absPath: string }): void => {
+    // pickFile is the only real sender and always includes both fields --
+    // this guard only matters for a malformed/payload-less menu:openFile
+    // message (e.g. a manual send-ipc call during testing), turning what
+    // would otherwise be an uncaught TypeError into a silent no-op.
+    if (!payload?.root || !payload.absPath) return
     void window.viewmaster.openRepo(payload.root).then((state) => {
       setRepo(state)
       setNavState(pushEntry(initialNavigationState(), { absPath: payload.absPath }))

@@ -106,7 +106,7 @@ driver> click .recent-item
 | `eval <js>` | evaluate in the page, print JSON |
 | `text [css-sel]` | print `innerText` |
 | `windows` | list Electron windows |
-| `send-ipc <channel>` | send an IPC message to every window's `webContents` directly, bypassing the native menu entirely (see Gotchas — menu accelerators don't reliably reach the app under xvfb) |
+| `send-ipc <channel> [json-payload]` | send an IPC message to every window's `webContents` directly, bypassing the native menu entirely (see Gotchas — menu accelerators don't reliably reach the app under xvfb). The optional trailing argument is parsed as JSON and passed as the message payload — required for channels like `menu:openFile` that carry data. |
 | `quit` | close app, exit driver |
 
 ## Run (human path)
@@ -147,7 +147,9 @@ npm test             # vitest — 98/98 passing as of this writing
   To exercise a menu-triggered feature, use `send-ipc <channel>` with the
   same channel name the menu's `click` handler sends (check
   `src/main/index.ts`'s `send*` helpers) — this is the exact same IPC
-  message a real menu click sends, just triggered directly.
+  message a real menu click sends, just triggered directly. Some channels
+  carry a payload the renderer requires — e.g. `menu:openFile` needs
+  `{ root, absPath }`: `send-ipc menu:openFile {"root":"/abs/dir","absPath":"/abs/dir/file.md"}`.
 - **Chrome's own sandbox helper still needs setuid outside this driver.**
   Running the *built app* directly (not via the driver) hits
   `FATAL:setuid_sandbox_host.cc` unless `node_modules/electron/dist/chrome-sandbox`
