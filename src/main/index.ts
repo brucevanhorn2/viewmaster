@@ -1,5 +1,5 @@
 import { app, BrowserWindow, Menu, dialog, shell } from 'electron'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { registerIpc, disposeIpc } from './ipc'
 import { getRecentFolders, getWindowBounds, setWindowBounds } from './store'
 import { getPathArgFromArgv } from './argv'
@@ -17,6 +17,10 @@ function getMainWindow(): BrowserWindow | null {
 
 function sendOpenFolder(root: string): void {
   getMainWindow()?.webContents.send('menu:openFolder', root)
+}
+
+function sendOpenFile(root: string, absPath: string): void {
+  getMainWindow()?.webContents.send('menu:openFile', { root, absPath })
 }
 
 function sendFindInFiles(): void {
@@ -41,6 +45,16 @@ async function pickFolder(): Promise<void> {
   const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
   if (!result.canceled && result.filePaths.length > 0) {
     sendOpenFolder(result.filePaths[0])
+  }
+}
+
+async function pickFile(): Promise<void> {
+  const win = getMainWindow()
+  if (!win) return
+  const result = await dialog.showOpenDialog(win, { properties: ['openFile'] })
+  if (!result.canceled && result.filePaths.length > 0) {
+    const absPath = result.filePaths[0]
+    sendOpenFile(dirname(absPath), absPath)
   }
 }
 
@@ -99,6 +113,10 @@ function buildMenu(): void {
           label: 'Open Folder…',
           accelerator: 'CmdOrCtrl+O',
           click: () => void pickFolder()
+        },
+        {
+          label: 'Open File…',
+          click: () => void pickFile()
         },
         {
           label: 'Open Recent',

@@ -43,6 +43,8 @@ const api = {
     subscribe('repo:changed', cb),
   onMenuOpenFolder: (cb: (root: string) => void): (() => void) =>
     subscribe('menu:openFolder', cb),
+  onMenuOpenFile: (cb: (payload: { root: string; absPath: string }) => void): (() => void) =>
+    subscribe('menu:openFile', cb),
   onMenuFindInFiles: (cb: () => void): (() => void) => subscribe<void>('menu:findInFiles', () => cb()),
   onMenuRelatedFiles: (cb: () => void): (() => void) => subscribe<void>('menu:relatedFiles', () => cb()),
   onMenuGoBack: (cb: () => void): (() => void) => subscribe<void>('menu:goBack', () => cb()),

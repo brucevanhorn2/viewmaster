@@ -137,12 +137,19 @@ const COMMANDS = {
   // xvfb/CDP-driven keyboard events. This sends the exact IPC message a
   // menu click sends (see src/main/index.ts's send* helpers) directly to
   // every window, bypassing the native menu/accelerator path entirely.
-  async 'send-ipc'(channel) {
+  async 'send-ipc'(argStr) {
     if (!app) return console.log('ERROR: launch first')
-    await app.evaluate(({ BrowserWindow }, ch) => {
-      for (const w of BrowserWindow.getAllWindows()) w.webContents.send(ch)
-    }, channel)
-    console.log('send-ipc', channel, '→ sent')
+    const spaceIdx = argStr.indexOf(' ')
+    const channel = spaceIdx === -1 ? argStr : argStr.slice(0, spaceIdx)
+    const payloadStr = spaceIdx === -1 ? undefined : argStr.slice(spaceIdx + 1).trim()
+    const payload = payloadStr ? JSON.parse(payloadStr) : undefined
+    await app.evaluate(
+      ({ BrowserWindow }, { ch, p }) => {
+        for (const w of BrowserWindow.getAllWindows()) w.webContents.send(ch, p)
+      },
+      { ch: channel, p: payload }
+    )
+    console.log('send-ipc', channel, '→ sent', payload ?? '')
   },
 
   async quit() {
@@ -161,7 +168,15 @@ const stdin = fs.createReadStream(null, { fd: fs.openSync('/dev/stdin', 'r') })
 const rl = readline.createInterface({ input: stdin, output: process.stdout, prompt: 'driver> ' })
 
 rl.on('line', async (line) => {
-  const [cmd, ...rest] = line.trim().split(/\s+/)
+  // Splitting on the first space only (not tokenizing the whole line) keeps
+  // any whitespace inside the argument itself intact -- e.g. a JSON payload
+  // with multiple consecutive spaces in a string value, or a path with a
+  // double space, previously got silently collapsed by split(/\s+/) +
+  // join(' ') before the command ever saw it.
+  const trimmed = line.trim()
+  const spaceIdx = trimmed.indexOf(' ')
+  const cmd = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx)
+  const rest = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim()
   if (!cmd) return rl.prompt()
   const fn = COMMANDS[cmd]
   if (!fn) {
@@ -169,7 +184,7 @@ rl.on('line', async (line) => {
     return rl.prompt()
   }
   try {
-    await fn(rest.join(' '))
+    await fn(rest)
   } catch (e) {
     console.log('ERROR:', e.message)
   }
