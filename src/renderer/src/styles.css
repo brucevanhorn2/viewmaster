@@ -430,6 +430,47 @@ body {
   color: #d4d4d4;
 }
 
+.markdown-sidebyside {
+  height: 100%;
+  display: flex;
+}
+
+.markdown-sidebyside-pane {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.markdown-sidebyside-pane-new {
+  border-left: 1px solid var(--border);
+}
+
+/*
+ * :not(.markdown-sidebyside-pane-new) matters here: the new pane's scroll
+ * container carries BOTH "markdown-sidebyside-pane" and
+ * "markdown-sidebyside-pane-new" (see MarkdownSideBySideView.tsx), so an
+ * unqualified ".markdown-sidebyside-pane .markdown-body a" selector would
+ * match the new pane's links too -- and since it has the same specificity
+ * as the ".markdown-sidebyside-pane-new .markdown-body a" rule below, it
+ * would keep winning for any property that rule doesn't also redeclare
+ * (color/text-decoration), silently reintroducing the inert styling this
+ * fix removes for the new pane. Scoping it to the old pane only lets the
+ * base ".markdown-body a" rule's color/text-decoration apply for the new
+ * pane, matching Rendered mode exactly.
+ */
+.markdown-sidebyside-pane:not(.markdown-sidebyside-pane-new) .markdown-body a {
+  pointer-events: none;
+  cursor: default;
+  text-decoration: none;
+  color: inherit;
+}
+
+.markdown-sidebyside-pane-new .markdown-body a {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
 /* ---- rendered html ---- */
 
 .html-scroll {
