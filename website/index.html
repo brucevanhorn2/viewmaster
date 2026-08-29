@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>View Master</title>
+  <meta
+    name="description"
+    content="View Master is a read-only desktop viewer for markdown documents, images, PDFs, and git branch diffs."
+  />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <img class="hero-logo" src="logo.png" alt="View Master logo" width="160" height="157" />
+    <h1>View Master</h1>
+    <p class="tagline">
+      A read-only desktop viewer for markdown documents, images, PDFs, and branch diffs.
+    </p>
+    <a class="cta" href="https://github.com/brucevanhorn2/viewmaster" target="_blank" rel="noopener">
+      View on GitHub
+    </a>
+  </header>
+
+  <main>
+    <section class="intro">
+      <p>
+        Built to replace reaching for a full IDE just to read a rendered markdown file,
+        preview an image or PDF, or eyeball what changed on a branch. View Master only ever
+        <em>views</em> — it never edits your files.
+      </p>
+    </section>
+
+    <section class="features">
+      <h2>Features</h2>
+      <div class="feature-grid">
+        <article class="feature-card">
+          <h3>Markdown viewing</h3>
+          <p>
+            Beautifully rendered markdown with inline Mermaid diagrams, syntax-highlighted
+            code fences, and in-app navigation between linked documents.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>Image &amp; PDF viewing</h3>
+          <p>
+            Click an image or PDF to see it rendered instantly — no other app required.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>HTML viewing</h3>
+          <p>
+            Sandboxed rendered previews of HTML files, with a Code and Diff toggle and one
+            click to open in your default browser.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>Branch diff viewing</h3>
+          <p>
+            See exactly what a branch changed — side-by-side diffs, or changes shown as
+            proofreader's marks right in the rendered document.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>Code navigation</h3>
+          <p>
+            Find in Files, Go to Definition, Find Usages, and Related Files — all without
+            leaving the viewer.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="screenshots">
+      <h2>See it in action</h2>
+      <figure>
+        <img
+          src="screenshots/markdown-mermaid.png"
+          alt="A markdown file rendered in View Master, showing a Mermaid diagram and a syntax-highlighted code fence"
+          loading="lazy"
+        />
+        <figcaption>
+          Markdown, rendered — including inline Mermaid diagrams and syntax-highlighted code.
+        </figcaption>
+      </figure>
+      <figure>
+        <img
+          src="screenshots/branch-diff.png"
+          alt="A side-by-side code diff shown in View Master"
+          loading="lazy"
+        />
+        <figcaption>Every branch diff, side-by-side by default.</figcaption>
+      </figure>
+      <figure>
+        <img
+          src="screenshots/code-view.png"
+          alt="A TypeScript file with full syntax highlighting shown in View Master"
+          loading="lazy"
+        />
+        <figcaption>
+          Read-only code viewing with full syntax highlighting, powered by Monaco.
+        </figcaption>
+      </figure>
+    </section>
+  </main>
+
+  <footer>
+    <p>
+      MIT licensed.
+      <a href="https://github.com/brucevanhorn2/viewmaster" target="_blank" rel="noopener">
+        View the source on GitHub
+      </a>.
+    </p>
+  </footer>
+</body>
+</html>
