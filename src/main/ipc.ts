@@ -219,10 +219,15 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
   ipcMain.handle('mode:set', async (_e, mode: SidebarMode): Promise<RepoState | null> => {
     if (!session) return null
     const root = session.root
+    const customRef = session.customBaselineRef
     session.mode = mode
     setFolderMode(root, mode)
     const fresh = await computeRepoState(root, mode)
-    if (session?.root !== root || session.mode !== mode) return null // repo switched or mode changed again mid-compute — drop stale update
+    // Stale if the repo switched, the mode changed again, or a concurrent
+    // baseline:setCustom call already changed customBaselineRef mid-compute
+    // -- `fresh` reflects whatever ref was active when computeRepoState
+    // read it, so committing it here would stomp that newer call's result.
+    if (session?.root !== root || session.mode !== mode || session.customBaselineRef !== customRef) return null
     if (fresh.kind === 'repo') session.baseline = fresh.baseline
     return fresh
   })

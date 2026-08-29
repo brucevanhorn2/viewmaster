@@ -205,6 +205,10 @@ body {
   color: var(--fg-dim);
 }
 
+.sidebar-message-reset {
+  margin-top: 12px;
+}
+
 .tree-row {
   display: flex;
   align-items: center;

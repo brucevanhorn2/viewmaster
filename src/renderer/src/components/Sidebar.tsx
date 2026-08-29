@@ -190,11 +190,24 @@ export default function Sidebar({
   )
 
   if (state.kind === 'error') {
+    // A custom baseline that errors here has no other in-app recovery path:
+    // baseline:setCustom rolls its own failed ref back internally, but a
+    // ref that was valid and later stops being one (e.g. the compared
+    // branch got deleted) isn't rolled back by mode:set or the watcher's
+    // recompute, leaving this error state stuck until something clears it.
+    // Always offering the reset here (regardless of what caused the error)
+    // is a cheap, harmless action that's the only escape for that case.
     return (
       <div className="sidebar">
         <div className="sidebar-message">
           Couldn&apos;t open folder
           <div className="sidebar-message-detail">{state.message}</div>
+          <button
+            className="toolbar-button baseline-reset sidebar-message-reset"
+            onClick={() => onSetCustomBaseline(null)}
+          >
+            Reset to default baseline
+          </button>
         </div>
       </div>
     )
