@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - 'website/**'
+      - '.github/workflows/deploy-website.yml'
   workflow_dispatch:
 
 permissions:
@@ -14,7 +15,12 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # false, not true: a queued run should be skipped in favor of the latest
+  # push, but an in-progress production deployment must be allowed to
+  # finish -- cancelling it mid-flight can leave GitHub's deployment record
+  # stuck, requiring a manual re-run to clear. Matches GitHub's own official
+  # Pages deploy template.
+  cancel-in-progress: false
 
 jobs:
   deploy:

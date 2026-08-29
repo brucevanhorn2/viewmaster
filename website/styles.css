@@ -119,6 +119,10 @@ main {
 .screenshots img {
   display: block;
   width: 100%;
+  /* Pairs with the width/height attributes on each <img> -- the browser
+     reserves the correct aspect-ratio space before the image loads,
+     preventing layout shift, while this still scales it responsively. */
+  height: auto;
   border-radius: 10px;
   border: 1px solid var(--border);
 }
@@ -139,7 +143,9 @@ footer {
 }
 
 footer a {
-  color: var(--accent-hover);
+  /* --accent-hover (#1177bb) is only ~3.5:1 against --bg here -- fails
+     WCAG AA (4.5:1) at this font size. This lighter blue clears ~7:1. */
+  color: #6cb6ff;
 }
 
 code {
