@@ -68,6 +68,19 @@ export default function App(): React.JSX.Element {
   const [historyTick, setHistoryTick] = useState(0)
 
   const openFolder = useCallback((root: string): void => {
+    // Nothing from the previous folder is relevant to the new one -- a
+    // complete reset (even when reopening the same folder from Recents) is
+    // simplest and correct. See docs/superpowers/specs/2026-08-26-monaco-
+    // model-disposal-design.md. Skip a model still attached to a live
+    // editor (same guard as modelLru.ts's eviction path) -- the old
+    // CodeView is still rendering against it until this folder's state
+    // finishes loading and it unmounts; disposing it now would blank that
+    // pane mid-transition. It stays tracked and gets swept up by the next
+    // LRU eviction cycle once it's no longer attached.
+    monaco.editor
+      .getModels()
+      .filter((model) => !model.isAttachedToEditor())
+      .forEach((model) => model.dispose())
     void window.viewmaster.openRepo(root).then((state) => {
       setRepo(state)
       setNavState(initialNavigationState())
