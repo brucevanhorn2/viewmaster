@@ -46,6 +46,50 @@ async function pickFolder(): Promise<void> {
 
 function buildMenu(): void {
   const recents = getRecentFolders()
+  // Electron gives no way to append custom items to a role-based submenu like
+  // { role: 'editMenu' }, so the standard edit items are inlined here to let
+  // Find in Files… / Related Files… sit at the bottom of Edit. Keep this list
+  // in sync with Electron's built-in editMenu role if Electron is upgraded.
+  const editExtras: Electron.MenuItemConstructorOptions[] =
+    process.platform === 'darwin'
+      ? [
+          { role: 'undo' },
+          { role: 'redo' },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'pasteAndMatchStyle' },
+          { role: 'delete' },
+          { role: 'selectAll' },
+          { type: 'separator' },
+          {
+            label: 'Substitutions',
+            submenu: [
+              { role: 'showSubstitutions' },
+              { type: 'separator' },
+              { role: 'toggleSmartQuotes' },
+              { role: 'toggleSmartDashes' },
+              { role: 'toggleTextReplacement' }
+            ]
+          },
+          {
+            label: 'Speech',
+            submenu: [{ role: 'startSpeaking' }, { role: 'stopSpeaking' }]
+          }
+        ]
+      : [
+          { role: 'undo' },
+          { role: 'redo' },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'delete' },
+          { type: 'separator' },
+          { role: 'selectAll' }
+        ]
+
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
     {
@@ -67,8 +111,10 @@ function buildMenu(): void {
       ]
     },
     {
-      label: 'Search',
+      label: 'Edit',
       submenu: [
+        ...editExtras,
+        { type: 'separator' },
         {
           label: 'Find in Files…',
           accelerator: 'CmdOrCtrl+Shift+F',
@@ -81,8 +127,9 @@ function buildMenu(): void {
         }
       ]
     },
+    { role: 'viewMenu' },
     {
-      label: 'Go',
+      label: 'Navigate',
       submenu: [
         {
           label: 'Back',
@@ -96,8 +143,6 @@ function buildMenu(): void {
         }
       ]
     },
-    { role: 'editMenu' },
-    { role: 'viewMenu' },
     { role: 'windowMenu' }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))

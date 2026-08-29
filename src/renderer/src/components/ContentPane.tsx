@@ -5,13 +5,14 @@ import type { NavigationTarget } from '../navigation/history'
 import CodeView from './CodeView'
 import DiffView from './DiffView'
 import MarkdownView from './MarkdownView'
+import MarkdownSideBySideView from './MarkdownSideBySideView'
 import HtmlView from './HtmlView'
 import Placeholder from './Placeholder'
 import ImageView from './ImageView'
 import { rasterDataUrl, svgDataUrl } from '../image/dataUrl'
 import PdfView from './PdfView'
 
-type Mode = 'view' | 'marks' | 'code' | 'diff'
+type Mode = 'view' | 'marks' | 'sideBySideRendered' | 'code' | 'diff'
 
 const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx']
 
@@ -116,7 +117,7 @@ export default function ContentPane({
 
   // Resolve base/compare sides from the selection when diffing.
   useEffect(() => {
-    if (!file || (mode !== 'diff' && mode !== 'marks')) return
+    if (!file || (mode !== 'diff' && mode !== 'marks' && mode !== 'sideBySideRendered')) return
     let stale = false
     const resolve = async (ref: RevisionRef): Promise<string> => {
       if (ref === 'baseline') return window.viewmaster.readBaseFile(file.path)
@@ -199,6 +200,29 @@ export default function ContentPane({
         <MarkdownView
           content={compareContent}
           baseContent={baseContent}
+          absPath={file.absPath}
+          workspaceRoot={workspaceRoot}
+          onNavigate={onMarkdownNavigate}
+          scrollToAnchor={anchorTarget}
+          onAnchorConsumed={onTargetConsumed}
+        />
+      )
+  } else if (
+    !isSvg(file.path) &&
+    mode === 'sideBySideRendered' &&
+    isMarkdown(file.path) &&
+    (content.kind === 'text' || content.kind === 'missing')
+  ) {
+    // Same reasoning as the diff/marks branches above -- a deleted markdown
+    // file's Side-by-Side view is meaningful (old pane shows the removed
+    // content, new pane empty) even with no current content.
+    body =
+      baseContent === null || compareContent === null ? (
+        <Placeholder title="Loading…" />
+      ) : (
+        <MarkdownSideBySideView
+          baseContent={baseContent}
+          content={compareContent}
           absPath={file.absPath}
           workspaceRoot={workspaceRoot}
           onNavigate={onMarkdownNavigate}
@@ -300,13 +324,19 @@ export default function ContentPane({
             </span>
           ) : showToolbarToggles && isMarkdown(file.path) ? (
             <span className="toolbar-segment">
-              {(['view', 'marks', 'diff'] as const).map((m) => (
+              {(['view', 'marks', 'sideBySideRendered', 'diff'] as const).map((m) => (
                 <button
                   key={m}
                   className={`toolbar-button${mode === m ? ' active' : ''}`}
                   onClick={() => setMode(m)}
                 >
-                  {m === 'view' ? 'Rendered' : m === 'marks' ? 'Marks' : 'Source'}
+                  {m === 'view'
+                    ? 'Rendered'
+                    : m === 'marks'
+                      ? 'Marks'
+                      : m === 'sideBySideRendered'
+                        ? 'Side-by-Side'
+                        : 'Source'}
                 </button>
               ))}
             </span>

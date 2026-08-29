@@ -6,6 +6,14 @@ import '../monacoSetup'
 import { languageForFile } from '../monacoSetup'
 import { extractImportSpecifiers, candidateImportPaths, isTsJsExtension } from '../code/resolveImports'
 import { encodeForMonacoPath } from '../code/monacoPath'
+import { touchModel } from '../code/modelLru'
+
+// Bounds how many distinct files' Monaco models can accumulate at once
+// within one open folder (see docs/superpowers/specs/2026-08-26-monaco-
+// model-disposal-design.md) -- generous enough that ordinary browsing
+// never triggers eviction, while bounding the real worst case of a long
+// session touching hundreds of files in one large repo.
+const MODEL_CAP = 60
 
 export default function CodeView({
   fileName,
@@ -68,12 +76,16 @@ export default function CodeView({
           if (cancelled) return
           if (!isTsJsExtension(candidate)) continue
           const uri = monaco.Uri.file(candidate)
-          if (monaco.editor.getModel(uri)) return
+          if (monaco.editor.getModel(uri)) {
+            touchModel(uri, MODEL_CAP)
+            return
+          }
           const result = await window.viewmaster.readFile(candidate)
           if (cancelled || result.kind !== 'text') continue
           if (!monaco.editor.getModel(uri)) {
             monaco.editor.createModel(result.content, languageForFile(candidate), uri)
           }
+          touchModel(uri, MODEL_CAP)
           return
         }
       })
@@ -82,6 +94,14 @@ export default function CodeView({
       cancelled = true
     }
   }, [fileName, absPath, content])
+
+  // Tracks the main displayed file's own model for LRU eviction, keyed the
+  // same deterministic way its `path` prop below is computed -- reading
+  // editorInstance.getModel() instead would risk a one-render-behind race
+  // against @monaco-editor/react's own internal model-switch effect.
+  useEffect(() => {
+    touchModel(monaco.Uri.parse(encodeForMonacoPath(absPath)), MODEL_CAP)
+  }, [absPath])
 
   return (
     <Editor
