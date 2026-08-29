@@ -1,0 +1,40 @@
+name: Deploy website
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  # false, not true: a queued run should be skipped in favor of the latest
+  # push, but an in-progress production deployment must be allowed to
+  # finish -- cancelling it mid-flight can leave GitHub's deployment record
+  # stuck, requiring a manual re-run to clear. Matches GitHub's own official
+  # Pages deploy template.
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
