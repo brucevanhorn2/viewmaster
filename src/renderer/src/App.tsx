@@ -74,6 +74,13 @@ export default function App(): React.JSX.Element {
     })
   }, [])
 
+  const openFile = useCallback((payload: { root: string; absPath: string }): void => {
+    void window.viewmaster.openRepo(payload.root).then((state) => {
+      setRepo(state)
+      setNavState(pushEntry(initialNavigationState(), { absPath: payload.absPath }))
+    })
+  }, [])
+
   const setMode = useCallback((mode: SidebarMode): void => {
     void window.viewmaster.setMode(mode).then((state) => {
       if (!state) return
@@ -82,6 +89,7 @@ export default function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => window.viewmaster.onMenuOpenFolder(openFolder), [openFolder])
+  useEffect(() => window.viewmaster.onMenuOpenFile(openFile), [openFile])
 
   // Watcher-driven auto-refresh: update the change list in place. `selected`
   // is re-derived below from the nav stack + fresh `repo`, so no separate
