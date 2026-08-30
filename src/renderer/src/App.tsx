@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
 import * as monaco from 'monaco-editor'
@@ -24,6 +24,7 @@ import {
   pushEntry,
   type NavigationTarget
 } from './navigation/history'
+import { isStaleRequest } from './navigation/staleRequest'
 
 function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Element {
   const [recents, setRecents] = useState<string[]>([])
@@ -67,6 +68,18 @@ export default function App(): React.JSX.Element {
   const [selection, setSelection] = useState<Selection>(defaultSelection())
   const [historyTick, setHistoryTick] = useState(0)
 
+  // Guards openFolder/openFile against resolving out of order: two
+  // window.viewmaster.openRepo() calls racing (e.g. two Recent Folder
+  // clicks, or a menu:openFile racing a folder open) can resolve in either
+  // order regardless of which one actually became the live main-process
+  // session (see isStaleGeneration in src/main/ipc.ts for that separate,
+  // main-process-side race) -- applying a response whose request has since
+  // been superseded would show one repo's data while session/file:read
+  // containment is actually keyed to a different, newer root. Bumped
+  // synchronously before each call's first await, so the outcome is
+  // deterministic regardless of which call's IPC round-trip finishes first.
+  const openRequestId = useRef(0)
+
   const openFolder = useCallback((root: string): void => {
     // Nothing from the previous folder is relevant to the new one -- a
     // complete reset (even when reopening the same folder from Recents) is
@@ -81,7 +94,9 @@ export default function App(): React.JSX.Element {
       .getModels()
       .filter((model) => !model.isAttachedToEditor())
       .forEach((model) => model.dispose())
+    const myRequestId = ++openRequestId.current
     void window.viewmaster.openRepo(root).then((state) => {
+      if (isStaleRequest(myRequestId, openRequestId.current)) return
       setRepo(state)
       setNavState(initialNavigationState())
     })
@@ -93,7 +108,9 @@ export default function App(): React.JSX.Element {
     // message (e.g. a manual send-ipc call during testing), turning what
     // would otherwise be an uncaught TypeError into a silent no-op.
     if (!payload?.root || !payload.absPath) return
+    const myRequestId = ++openRequestId.current
     void window.viewmaster.openRepo(payload.root).then((state) => {
+      if (isStaleRequest(myRequestId, openRequestId.current)) return
       setRepo(state)
       setNavState(pushEntry(initialNavigationState(), { absPath: payload.absPath }))
     })
