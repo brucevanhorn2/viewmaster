@@ -161,6 +161,21 @@ describe('collectChanges', () => {
     expect(byPath(files, 'sibling-only.txt')).toBeDefined()
   })
 
+  it('includes a file deleted (uncommitted) in the worktree when it exists at a custom baseline', async () => {
+    await repo.write('base.txt', 'base\n')
+    await repo.write('doomed.txt', 'here today\n')
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'initial')
+    await repo.git('branch', 'baseline-tag')
+    // doomed.txt is unchanged between the baseline and HEAD (no further
+    // commits), then deleted from the working tree without committing.
+    await rm(join(repo.root, 'doomed.txt'))
+
+    const files = await collectChanges(repo.root, { kind: 'custom', ref: 'baseline-tag' })
+
+    expect(byPath(files, 'doomed.txt')?.status).toBe('committed')
+  })
+
   it('rejects a custom ref that looks like a git option instead of passing it through', async () => {
     await repo.write('base.txt', 'base\n')
     await repo.git('add', '.')

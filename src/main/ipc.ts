@@ -114,7 +114,12 @@ async function computeRepoState(
   mode: SidebarMode,
   resolved?: RootResolution
 ): Promise<RepoState> {
-  const { gitRoot } = resolved ?? (await resolveRoot(root))
+  let gitRoot: string | null
+  try {
+    ;({ gitRoot } = resolved ?? (await resolveRoot(root)))
+  } catch (err) {
+    return { kind: 'error', root, message: err instanceof Error ? err.message : String(err) }
+  }
   if (gitRoot === null) {
     try {
       const paths = await listFolderTree(root)
@@ -140,9 +145,32 @@ async function computeRepoState(
 
 type WindowGetter = () => BrowserWindow | null
 
-async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoState> {
+// Bumped at the start of every openRepo call. Guards against overlapping
+// repo:open calls (e.g. rapid folder switching): whichever call's watcher/
+// recorder would otherwise be assigned into `session` last "wins" even if
+// it's not the most recent call, orphaning the loser's watcher/recorder
+// forever. Each call captures the generation it started with and checks it
+// again just before committing to `session` -- see `isStaleGeneration`.
+let openGeneration = 0
+
+/**
+ * True when a call that began at generation `myGeneration` has been
+ * superseded by a newer `openRepo` call (which bumped `currentGeneration`
+ * past it) by the time it's ready to commit its result.
+ */
+export function isStaleGeneration(myGeneration: number, currentGeneration: number): boolean {
+  return myGeneration !== currentGeneration
+}
+
+export async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoState> {
+  const myGeneration = ++openGeneration
   await closeSession()
-  const resolved = await resolveRoot(root)
+  let resolved: RootResolution
+  try {
+    resolved = await resolveRoot(root)
+  } catch (err) {
+    return { kind: 'error', root, message: err instanceof Error ? err.message : String(err) }
+  }
   const mode = getFolderMode(resolved.gitRoot ?? root)
   const state = await computeRepoState(root, mode, resolved)
 
@@ -177,19 +205,27 @@ async function openRepo(getWindow: WindowGetter, root: string): Promise<RepoStat
         if (win && !win.isDestroyed()) win.webContents.send('repo:changed', fresh)
       }, RECOMPUTE_DEBOUNCE_MS)
     })
-    session = {
-      root: state.root,
-      baseline: state.kind === 'repo' ? state.baseline : null,
-      // A folder session has no Changed/Browse toggle — it always shows the
-      // full tree — so `mode` is unused for 'folder' sessions; 'browse' is
-      // semantically accurate (as opposed to the never-read-for-anything
-      // 'changed' default), but only 'repo' sessions actually consult it.
-      mode: state.kind === 'repo' ? state.mode : 'browse',
-      watcher,
-      recorder,
-      searchPaths: null,
-      searchGeneration: 0,
-      customBaselineRef: null
+    if (isStaleGeneration(myGeneration, openGeneration)) {
+      // A newer openRepo call started after this one -- this call lost the
+      // race. Don't leak the watcher/recorder just constructed for it, and
+      // don't let it clobber the newer call's session.
+      await watcher.close()
+      if (recorder) await recorder.close()
+    } else {
+      session = {
+        root: state.root,
+        baseline: state.kind === 'repo' ? state.baseline : null,
+        // A folder session has no Changed/Browse toggle — it always shows the
+        // full tree — so `mode` is unused for 'folder' sessions; 'browse' is
+        // semantically accurate (as opposed to the never-read-for-anything
+        // 'changed' default), but only 'repo' sessions actually consult it.
+        mode: state.kind === 'repo' ? state.mode : 'browse',
+        watcher,
+        recorder,
+        searchPaths: null,
+        searchGeneration: 0,
+        customBaselineRef: null
+      }
     }
   }
 
@@ -275,7 +311,12 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     return [...new Set([...branchNames, ...tagNames])]
   })
 
-  ipcMain.handle('file:read', (_e, absPath: string): Promise<FileContent> => readCurrentFile(absPath))
+  ipcMain.handle('file:read', async (_e, absPath: string): Promise<FileContent> => {
+    if (!session) return { kind: 'missing' }
+    const real = await resolveWithinRoot(absPath, session.root)
+    if (!real) return { kind: 'missing' }
+    return readCurrentFile(real)
+  })
 
   ipcMain.handle('file:readBase', async (_e, relPath: string): Promise<string> => {
     if (!session || !session.baseline) return ''

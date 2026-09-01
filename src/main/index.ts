@@ -180,7 +180,7 @@ function createWindow(): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   })
 
@@ -247,7 +247,7 @@ app.whenReady().then(() => {
   })
 })
 
-app.on('window-all-closed', () => {
-  void disposeIpc()
+app.on('window-all-closed', async () => {
+  await disposeIpc()
   if (process.platform !== 'darwin') app.quit()
 })

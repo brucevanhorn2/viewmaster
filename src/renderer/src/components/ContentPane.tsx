@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import type { ChangedFile, FileContent, HistoryVersion } from '@shared/types'
 import { isDefaultSelection, type RevisionRef, type Selection } from '../history/selection'
 import type { NavigationTarget } from '../navigation/history'
@@ -11,6 +11,7 @@ import Placeholder from './Placeholder'
 import ImageView from './ImageView'
 import { rasterDataUrl, svgDataUrl } from '../image/dataUrl'
 import PdfView from './PdfView'
+import { requiresCodeModeForLineTarget } from '../navigation/lineTargetMode'
 
 type Mode = 'view' | 'marks' | 'sideBySideRendered' | 'code' | 'diff'
 
@@ -72,11 +73,11 @@ export default function ContentPane({
     setMode('view')
   }, [file?.path])
 
-  // A line-targeted navigation into a markdown file needs the raw-text
-  // 'code' mode to be meaningful (a rendered-HTML view has no line-number
-  // mapping) -- force it once, when the target first arrives. Unlike
-  // anchor-kind targets, a line-kind target is deliberately never consumed
-  // (there's no onTargetConsumed call for it): CodeView's highlight
+  // A line-targeted navigation into a markdown or HTML file needs the
+  // raw-text 'code' mode to be meaningful (a rendered view has no
+  // line-number mapping) -- force it once, when the target first arrives.
+  // Unlike anchor-kind targets, a line-kind target is deliberately never
+  // consumed (there's no onTargetConsumed call for it): CodeView's highlight
   // decoration depends on revealLine staying present as a prop, so clearing
   // it would erase the highlight right after showing it. That means the
   // user's own subsequent mode choice is only respected for the rest of the
@@ -87,7 +88,14 @@ export default function ContentPane({
   // intentional: revisiting a search-jump entry should re-show the
   // highlighted line, the same as re-clicking the search result.
   useEffect(() => {
-    if (file && isMarkdown(file.path) && navigationTarget?.kind === 'line') {
+    if (
+      file &&
+      requiresCodeModeForLineTarget({
+        isMarkdown: isMarkdown(file.path),
+        isHtml: isHtml(file.path),
+        hasLineTarget: navigationTarget?.kind === 'line'
+      })
+    ) {
       setMode('code')
     }
   }, [file?.path, navigationTarget])
@@ -96,6 +104,22 @@ export default function ContentPane({
   useEffect(() => {
     if (!isDefaultSelection(selection)) setMode((m) => (m === 'view' ? 'diff' : m))
   }, [selection])
+
+  // Clear stale content as soon as a different file is selected, before the
+  // async read below resolves. Without this, the pane can briefly render the
+  // *previous* file's content against the *new* file's toolbar (wrong
+  // extension icon, wrong title, wrong toggles) until readFile finishes.
+  // Scoped to the file identity only (not refreshKey) so an on-disk refresh
+  // of the *same* file doesn't flash the loading placeholder. This must be
+  // useLayoutEffect, not useEffect: the toolbar reads `file` straight from
+  // props, so it already reflects the new file the instant the parent
+  // re-renders -- a plain (post-paint) useEffect lets the browser paint that
+  // new toolbar next to the still-stale `content` state before the reset
+  // runs. useLayoutEffect flushes synchronously before paint, so the reset
+  // (and the placeholder it produces) is what actually reaches the screen.
+  useLayoutEffect(() => {
+    setContent(null)
+  }, [file?.absPath])
 
   // Current on-disk content (for view mode + the 'now' ref).
   useEffect(() => {
