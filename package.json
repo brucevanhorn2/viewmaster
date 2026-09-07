@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "build": "npm run typecheck && node --max-old-space-size=4096 ./node_modules/.bin/electron-vite build",
     "test": "vitest run",
+    "test:e2e": "npm run build && playwright test -c e2e/playwright.config.ts",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux",
     "dist:win": "npm run build && electron-builder --win"
@@ -42,6 +43,7 @@
     "monaco-editor": "^0.55.1",
     "node-htmldiff": "^0.9.4",
     "pdfjs-dist": "^6.2.108",
+    "@playwright/test": "^1.62.1",
     "playwright-core": "^1.62.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
