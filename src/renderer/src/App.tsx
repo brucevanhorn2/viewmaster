@@ -288,6 +288,7 @@ export default function App(): React.JSX.Element {
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [relatedFilesOpen, setRelatedFilesOpen] = useState(false)
+  const [sidebarVisible, setSidebarVisible] = useState(true)
 
   useEffect(() => window.viewmaster.onMenuFindInFiles(() => setSearchOpen(true)), [])
   useEffect(() => window.viewmaster.onMenuRelatedFiles(() => setRelatedFilesOpen(true)), [])
@@ -303,6 +304,8 @@ export default function App(): React.JSX.Element {
 
   const onCloseSearch = useCallback((): void => setSearchOpen(false), [])
   const onCloseRelatedFiles = useCallback((): void => setRelatedFilesOpen(false), [])
+  const onCloseSidebar = useCallback((): void => setSidebarVisible(false), [])
+  const onShowSidebar = useCallback((): void => setSidebarVisible(true), [])
 
   const navigationTarget = currentEntry(navState)?.target ?? null
 
@@ -332,7 +335,7 @@ export default function App(): React.JSX.Element {
   return (
     <div className="app">
       <Allotment defaultSizes={[280, 920]}>
-        <Allotment.Pane minSize={180} preferredSize={280}>
+        <Allotment.Pane visible={sidebarVisible} minSize={180} preferredSize={280}>
           <Allotment vertical>
             <Allotment.Pane>
               <Sidebar
@@ -341,6 +344,7 @@ export default function App(): React.JSX.Element {
                 onSelect={onSidebarSelect}
                 onSetMode={setMode}
                 onSetCustomBaseline={setCustomBaseline}
+                onClose={onCloseSidebar}
               />
             </Allotment.Pane>
             <Allotment.Pane preferredSize={220} minSize={80}>
@@ -389,6 +393,11 @@ export default function App(): React.JSX.Element {
         </Allotment.Pane>
       </Allotment>
       <StatusNotice />
+      {!sidebarVisible && (
+        <button className="sidebar-show-button" onClick={onShowSidebar} title="Show sidebar">
+          ›
+        </button>
+      )}
     </div>
   )
 }

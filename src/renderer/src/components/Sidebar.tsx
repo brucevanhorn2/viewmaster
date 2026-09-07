@@ -155,13 +155,15 @@ export default function Sidebar({
   selected,
   onSelect,
   onSetMode,
-  onSetCustomBaseline
+  onSetCustomBaseline,
+  onClose
 }: {
   state: RepoState
   selected: string | null
   onSelect: (file: ChangedFile) => void
   onSetMode: (mode: SidebarMode) => void
   onSetCustomBaseline: (ref: string | null) => void
+  onClose: () => void
 }): React.JSX.Element {
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const [editingBaseline, setEditingBaseline] = useState(false)
@@ -307,6 +309,9 @@ export default function Sidebar({
             ))}
           </span>
         )}
+        <button className="sidebar-close" title="Close sidebar" onClick={onClose}>
+          ×
+        </button>
       </div>
       <div className="sidebar-tree">
         {tree && tree.dirs.length === 0 && tree.files.length === 0 ? (
