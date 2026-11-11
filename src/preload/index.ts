@@ -1,11 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  ExternalKind,
   FileContent,
   HistoryVersion,
   RepoState,
   SearchResult,
   SidebarMode,
-  SymbolLocationsResult
+  SymbolLocationsResult,
+  SymbolQuery
 } from '@shared/types'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
@@ -55,10 +57,12 @@ const api = {
     ipcRenderer.invoke('history:list', relPath),
   historyRead: (sha: string): Promise<string> => ipcRenderer.invoke('history:read', sha),
   search: (query: string): Promise<SearchResult> => ipcRenderer.invoke('search:query', query),
-  findDefinitions: (word: string): Promise<SymbolLocationsResult> =>
-    ipcRenderer.invoke('symbol:definitions', word),
-  findReferences: (word: string): Promise<SymbolLocationsResult> =>
-    ipcRenderer.invoke('symbol:references', word),
+  findDefinitions: (q: SymbolQuery): Promise<SymbolLocationsResult> =>
+    ipcRenderer.invoke('symbol:definitions', q),
+  findReferences: (q: SymbolQuery): Promise<SymbolLocationsResult> =>
+    ipcRenderer.invoke('symbol:references', q),
+  externalKind: (absPath: string): Promise<ExternalKind | null> =>
+    ipcRenderer.invoke('file:externalKind', absPath),
   findImportedBy: (basename: string): Promise<SymbolLocationsResult> =>
     ipcRenderer.invoke('related:importedBy', basename),
   findRelatedReferences: (names: string[]): Promise<SymbolLocationsResult> =>

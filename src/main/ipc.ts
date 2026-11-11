@@ -2,13 +2,15 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import type { FSWatcher } from 'fs'
 import type {
   BaselineKind,
+  ExternalKind,
   FileContent,
   HistoryVersion,
   RepoState,
   SearchResult,
   SidebarMode,
   SymbolLocation,
-  SymbolLocationsResult
+  SymbolLocationsResult,
+  SymbolQuery
 } from '@shared/types'
 import { runGit } from './git/run'
 import { resolveBaseline } from './git/baseline'
@@ -24,6 +26,9 @@ import { readResource, resolveWithinRoot } from './files/resource'
 import { searchFiles } from './search/scan'
 import { looksLikeDefinition } from './search/definitionHeuristics'
 import { looksLikeImportOf } from './search/importHeuristics'
+import { resolveExternal } from './files/externalRoots'
+import { createLspManager, type LspManager } from './lsp/manager'
+import { languageForPath } from './lsp/translate'
 
 const RECOMPUTE_DEBOUNCE_MS = 300
 
@@ -43,6 +48,9 @@ interface Session {
   // never persisted, always reset to auto-detection when a fresh session is
   // created (openRepo). null means "use resolveBaseline() as normal."
   customBaselineRef: string | null
+  // Go/Python language servers for this folder (issue #22). Starts nothing
+  // until the first query; disposed with the session.
+  lsp: Pick<LspManager, 'query' | 'externalRoots' | 'dispose'>
 }
 
 let session: Session | null = null
@@ -84,9 +92,15 @@ async function closeSession(): Promise<void> {
   currentRelatedReferencesController?.abort()
   currentRelatedReferencesController = null
   if (session) {
-    await session.watcher.close()
-    if (session.recorder) await session.recorder.close()
+    // Detach first and dispose the manager before any await, so an LSP query
+    // still in flight sees its session is no longer current (and resolves
+    // to a fallback) instead of a half-closed session that still looks live.
+    const closing = session
     session = null
+    const lspDisposed = closing.lsp.dispose().catch(() => {})
+    await closing.watcher.close()
+    if (closing.recorder) await closing.recorder.close()
+    await lspDisposed
   }
 }
 
@@ -224,7 +238,9 @@ export async function openRepo(getWindow: WindowGetter, root: string): Promise<R
         recorder,
         searchPaths: null,
         searchGeneration: 0,
-        customBaselineRef: null
+        customBaselineRef: null,
+        // Created only for the winning call; it spawns nothing until queried.
+        lsp: createLspManager(state.root)
       }
     }
   }
@@ -312,10 +328,21 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
   })
 
   ipcMain.handle('file:read', async (_e, absPath: string): Promise<FileContent> => {
-    if (!session) return { kind: 'missing' }
-    const real = await resolveWithinRoot(absPath, session.root)
+    // Captured once: closeSession() may null `session` across the awaits.
+    const activeSession = session
+    if (!activeSession) return { kind: 'missing' }
+    const real =
+      (await resolveWithinRoot(absPath, activeSession.root)) ??
+      (await resolveExternal(absPath, activeSession.lsp.externalRoots()))?.real
     if (!real) return { kind: 'missing' }
     return readCurrentFile(real)
+  })
+
+  ipcMain.handle('file:externalKind', async (_e, absPath: string): Promise<ExternalKind | null> => {
+    const activeSession = session
+    if (!activeSession || typeof absPath !== 'string') return null
+    if (await resolveWithinRoot(absPath, activeSession.root)) return null
+    return (await resolveExternal(absPath, activeSession.lsp.externalRoots()))?.kind ?? null
   })
 
   ipcMain.handle('file:readBase', async (_e, relPath: string): Promise<string> => {
@@ -389,64 +416,27 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
 
   ipcMain.handle(
     'symbol:definitions',
-    async (_e, word: string): Promise<SymbolLocationsResult> => {
+    async (_e, q: SymbolQuery): Promise<SymbolLocationsResult> => {
       currentDefinitionsController?.abort()
       const activeSession = session
-      if (!activeSession) return { locations: [], truncated: false }
+      if (!activeSession || !isSymbolQuery(q)) return { locations: [], truncated: false }
+      // Registered before awaiting the server, so "latest query wins" holds
+      // across the LSP wait too.
       const controller = new AbortController()
       currentDefinitionsController = controller
-      const startedAt = Date.now()
-      try {
-        const paths = await getSearchPaths(activeSession)
-        const { matches, truncated } = await searchFiles(activeSession.root, paths, word, {
-          signal: controller.signal,
-          startedAt,
-          mode: 'word',
-          caseSensitive: true,
-          lineFilter: (line) => looksLikeDefinition(line, word)
-        })
-        const seen = new Set<string>()
-        const locations: SymbolLocation[] = []
-        for (const m of matches) {
-          const key = `${m.absPath}:${m.line}`
-          if (seen.has(key)) continue
-          seen.add(key)
-          locations.push({ path: m.path, absPath: m.absPath, line: m.line, column: m.column })
-        }
-        return { locations, truncated }
-      } catch (err) {
-        return { locations: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
-      }
+      return lspFirst('definition', activeSession, q, controller.signal, heuristicDefinitions)
     }
   )
 
   ipcMain.handle(
     'symbol:references',
-    async (_e, word: string): Promise<SymbolLocationsResult> => {
+    async (_e, q: SymbolQuery): Promise<SymbolLocationsResult> => {
       currentReferencesController?.abort()
       const activeSession = session
-      if (!activeSession) return { locations: [], truncated: false }
+      if (!activeSession || !isSymbolQuery(q)) return { locations: [], truncated: false }
       const controller = new AbortController()
       currentReferencesController = controller
-      const startedAt = Date.now()
-      try {
-        const paths = await getSearchPaths(activeSession)
-        const { matches, truncated } = await searchFiles(activeSession.root, paths, word, {
-          signal: controller.signal,
-          startedAt,
-          mode: 'word',
-          caseSensitive: true
-        })
-        const locations: SymbolLocation[] = matches.map((m) => ({
-          path: m.path,
-          absPath: m.absPath,
-          line: m.line,
-          column: m.column
-        }))
-        return { locations, truncated }
-      } catch (err) {
-        return { locations: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
-      }
+      return lspFirst('references', activeSession, q, controller.signal, heuristicReferences)
     }
   )
 
@@ -514,6 +504,117 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
       }
     }
   )
+}
+
+type Heuristic = (s: Session, word: string, signal: AbortSignal) => Promise<SymbolLocationsResult>
+
+function isSymbolQuery(q: unknown): q is SymbolQuery {
+  if (!q || typeof q !== 'object') return false
+  const o = q as Record<string, unknown>
+  return (
+    typeof o.word === 'string' &&
+    typeof o.absPath === 'string' &&
+    typeof o.line === 'number' &&
+    typeof o.column === 'number'
+  )
+}
+
+/**
+ * Go/Python ask the session's language server first; a real answer (even an
+ * empty one) replaces the heuristic. Any fallback runs the word heuristic and
+ * labels it approximate. Other languages are heuristic-only, unlabelled.
+ */
+async function lspFirst(
+  kind: 'definition' | 'references',
+  activeSession: Session,
+  q: SymbolQuery,
+  signal: AbortSignal,
+  heuristic: Heuristic
+): Promise<SymbolLocationsResult> {
+  const language = languageForPath(q.absPath)
+  if (!language) return { ...(await heuristic(activeSession, q.word, signal)), source: 'heuristic' }
+  // Only files the user can actually open go to the server: in-root, or under
+  // a main-computed external root. realpath also normalizes a lowercase drive.
+  const real =
+    (await resolveWithinRoot(q.absPath, activeSession.root)) ??
+    (await resolveExternal(q.absPath, activeSession.lsp.externalRoots()))?.real
+  const answer = real
+    ? await activeSession.lsp.query(kind, { ...q, absPath: real })
+    : ({ kind: 'fallback', reason: 'unavailable' } as const)
+  // The folder may have switched while the server worked: never hand the old
+  // session's locations to the new one.
+  const current = session
+  if (current !== activeSession) {
+    if (!current) return { locations: [], truncated: false }
+    return {
+      ...(await heuristic(current, q.word, signal)),
+      source: 'heuristic',
+      approximate: { language, reason: 'unavailable' }
+    }
+  }
+  if (answer.kind === 'answer') return { locations: answer.locations, truncated: false, source: 'lsp' }
+  return {
+    ...(await heuristic(activeSession, q.word, signal)),
+    source: 'heuristic',
+    approximate: { language, reason: answer.reason }
+  }
+}
+
+/** Today's word heuristic for definitions (declaration-shaped lines, one per line). */
+async function heuristicDefinitions(
+  activeSession: Session,
+  word: string,
+  signal: AbortSignal
+): Promise<SymbolLocationsResult> {
+  const startedAt = Date.now()
+  try {
+    const paths = await getSearchPaths(activeSession)
+    const { matches, truncated } = await searchFiles(activeSession.root, paths, word, {
+      signal,
+      startedAt,
+      mode: 'word',
+      caseSensitive: true,
+      lineFilter: (line) => looksLikeDefinition(line, word)
+    })
+    const seen = new Set<string>()
+    const locations: SymbolLocation[] = []
+    for (const m of matches) {
+      const key = `${m.absPath}:${m.line}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      locations.push({ path: m.path, absPath: m.absPath, line: m.line, column: m.column })
+    }
+    return { locations, truncated }
+  } catch (err) {
+    return { locations: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/** Today's word heuristic for references (every whole-word match). */
+async function heuristicReferences(
+  activeSession: Session,
+  word: string,
+  signal: AbortSignal
+): Promise<SymbolLocationsResult> {
+  const startedAt = Date.now()
+  try {
+    const paths = await getSearchPaths(activeSession)
+    const { matches, truncated } = await searchFiles(activeSession.root, paths, word, {
+      signal,
+      startedAt,
+      mode: 'word',
+      caseSensitive: true
+    })
+    const locations: SymbolLocation[] = matches.map((m) => ({
+      path: m.path,
+      absPath: m.absPath,
+      line: m.line,
+      column: m.column
+    }))
+    return { locations, truncated }
+  } catch (err) {
+    return { locations: [], truncated: false, error: err instanceof Error ? err.message : String(err) }
+  }
 }
 
 export async function disposeIpc(): Promise<void> {

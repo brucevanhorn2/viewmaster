@@ -1,6 +1,6 @@
 import * as monaco from 'monaco-editor'
 import { loader } from '@monaco-editor/react'
-import type { SymbolLocation } from '@shared/types'
+import type { SymbolLocation, SymbolQuery } from '@shared/types'
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
@@ -88,6 +88,11 @@ function wordUnderCursor(
   return model.getWordAtPosition(position)?.word ?? null
 }
 
+/** Monaco positions are 1-based; SymbolQuery columns are 0-based. */
+function symbolQuery(model: monaco.editor.ITextModel, position: monaco.Position, word: string): SymbolQuery {
+  return { word, absPath: model.uri.fsPath, line: position.lineNumber, column: position.column - 1 }
+}
+
 // TypeScript/JavaScript already get real, type-aware definition/reference
 // providers from Monaco's bundled TS language service the moment a
 // .ts/.tsx file is opened — registering a second, heuristic provider for
@@ -103,7 +108,7 @@ monaco.languages.registerDefinitionProvider(heuristicLanguageIds, {
   async provideDefinition(model, position) {
     const word = wordUnderCursor(model, position)
     if (!word) return []
-    const { locations } = await window.viewmaster.findDefinitions(word)
+    const { locations } = await window.viewmaster.findDefinitions(symbolQuery(model, position, word))
     return toMonacoLocations(locations)
   }
 })
@@ -112,7 +117,7 @@ monaco.languages.registerReferenceProvider(heuristicLanguageIds, {
   async provideReferences(model, position) {
     const word = wordUnderCursor(model, position)
     if (!word) return []
-    const { locations } = await window.viewmaster.findReferences(word)
+    const { locations } = await window.viewmaster.findReferences(symbolQuery(model, position, word))
     return toMonacoLocations(locations)
   }
 })

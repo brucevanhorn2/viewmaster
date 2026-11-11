@@ -251,3 +251,14 @@ app.on('window-all-closed', async () => {
   await disposeIpc()
   if (process.platform !== 'darwin') app.quit()
 })
+
+// app.quit() / Cmd+Q / menu Quit do not emit window-all-closed, so language
+// server children (issue #22) would otherwise outlive the app. Hold the quit
+// once until the session (and its servers) are disposed.
+let disposedForQuit = false
+app.on('will-quit', (event) => {
+  if (disposedForQuit) return
+  event.preventDefault()
+  disposedForQuit = true
+  void disposeIpc().finally(() => app.quit())
+})

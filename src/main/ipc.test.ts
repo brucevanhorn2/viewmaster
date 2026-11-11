@@ -1,8 +1,17 @@
-import { mkdirSync } from 'fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { realpath } from 'fs/promises'
 import { tmpdir } from 'os'
-import { join } from 'path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { basename, join } from 'path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SymbolLocationsResult, SymbolQuery } from '@shared/types'
+import type { ExternalRoot } from './files/externalRoots'
+import type { LspAnswer } from './lsp/manager'
 import { makeRepo, type TestRepo } from './git/testRepo'
+
+// Every ipcMain.handle registration is captured so handlers can be invoked
+// directly (see registerIpc below).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const handlers = vi.hoisted(() => new Map<string, (...args: any[]) => any>())
 
 // ipc.ts (and store.ts, transitively, via electron-store) import 'electron'
 // at module load time. There's no Electron process running in the test
@@ -19,7 +28,11 @@ vi.mock('electron', () => ({
   BrowserWindow: class {},
   clipboard: { writeText: () => {} },
   dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },
-  ipcMain: { handle: () => {}, on: () => {} },
+  ipcMain: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handle: (channel: string, fn: (...args: any[]) => any) => handlers.set(channel, fn),
+    on: () => {}
+  },
   shell: {
     openPath: async () => '',
     openExternal: async () => {},
@@ -60,9 +73,47 @@ vi.mock('./history/recorder', () => ({
   })
 }))
 
-const { isStaleGeneration, openRepo } = await import('./ipc')
+// One fake LspManager per openRepo session; each test configures what
+// `query` answers and which external roots the manager reports.
+interface FakeManager {
+  root: string
+  query: ReturnType<typeof vi.fn>
+  externalRoots: ReturnType<typeof vi.fn>
+  dispose: ReturnType<typeof vi.fn>
+}
+const managers: FakeManager[] = []
+const lspBehavior: {
+  query: (kind: string, q: SymbolQuery) => Promise<LspAnswer>
+  roots: ExternalRoot[]
+} = {
+  query: async () => ({ kind: 'fallback', reason: 'unavailable' }),
+  roots: []
+}
+
+vi.mock('./lsp/manager', () => ({
+  createLspManager: vi.fn((root: string) => {
+    const m: FakeManager = {
+      root,
+      query: vi.fn((kind: string, q: SymbolQuery) => lspBehavior.query(kind, q)),
+      externalRoots: vi.fn(() => lspBehavior.roots),
+      dispose: vi.fn(async () => {})
+    }
+    managers.push(m)
+    return m
+  })
+}))
+
+const { isStaleGeneration, openRepo, registerIpc } = await import('./ipc')
 
 const noopGetWindow = (): null => null
+registerIpc(noopGetWindow)
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function invoke<T>(channel: string, ...args: any[]): Promise<T> {
+  const fn = handlers.get(channel)
+  if (!fn) throw new Error(`no handler for ${channel}`)
+  return Promise.resolve(fn({}, ...args))
+}
 
 describe('isStaleGeneration', () => {
   it('is not stale when the generation is unchanged', () => {
@@ -140,5 +191,167 @@ describe('openRepo error propagation', () => {
       expect(state.root).toBe(missingRoot)
       expect(state.message).toContain('Folder not found')
     }
+  })
+})
+
+const missingRoot = join(tmpdir(), 'viewmaster-ipc-test-does-not-exist')
+
+describe('LSP wiring', () => {
+  // Plain (non-git) temp folders: folder-mode sessions keep the root exactly
+  // as given, so paths compare cleanly on Windows.
+  const dirs: string[] = []
+  const mkdir = async (prefix: string): Promise<string> => {
+    const d = await realpath(mkdtempSync(join(tmpdir(), prefix)))
+    dirs.push(d)
+    return d
+  }
+  let ws: string
+
+  beforeEach(async () => {
+    ws = await mkdir('vm-ipc-ws-')
+    writeFileSync(join(ws, 'main.go'), 'package main\n\nfunc Foo() {}\n\nfunc main() { Foo() }\n')
+    writeFileSync(join(ws, 'util.ts'), 'export function Bar() {}\n')
+    lspBehavior.query = async () => ({ kind: 'fallback', reason: 'unavailable' })
+    lspBehavior.roots = []
+    managers.length = 0
+    const state = await openRepo(noopGetWindow, ws)
+    expect(state.kind).toBe('folder')
+  })
+  afterEach(async () => {
+    await openRepo(noopGetWindow, missingRoot) // closes the session
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true })
+    managers.length = 0
+    watchers.length = 0
+    recorders.length = 0
+  })
+
+  const goQ = (): SymbolQuery => ({ word: 'Foo', absPath: join(ws, 'main.go'), line: 5, column: 15 })
+
+  it('creates one manager per session and disposes it on folder switch', async () => {
+    expect(managers).toHaveLength(1)
+    expect(managers[0].root).toBe(ws)
+    const other = await mkdir('vm-ipc-other-')
+    await openRepo(noopGetWindow, other)
+    expect(managers[0].dispose).toHaveBeenCalledTimes(1)
+    expect(managers).toHaveLength(2)
+    expect(managers[1].dispose).not.toHaveBeenCalled()
+  })
+
+  it('file:read serves a file under an external root and rejects one outside', async () => {
+    const ext = await mkdir('vm-ipc-ext-')
+    const outside = await mkdir('vm-ipc-outside-')
+    writeFileSync(join(ext, 'fmt.go'), 'package fmt\n')
+    writeFileSync(join(outside, 'secret.go'), 'package secret\n')
+    lspBehavior.roots = [{ kind: 'go-stdlib', dir: ext }]
+
+    expect(await invoke('file:read', join(ext, 'fmt.go'))).toEqual({ kind: 'text', content: 'package fmt\n' })
+    expect(await invoke('file:read', join(outside, 'secret.go'))).toEqual({ kind: 'missing' })
+    // traversal out of the root is resolved first, then rejected
+    expect(await invoke('file:read', `${ext}/../${basename(outside)}/secret.go`)).toEqual({ kind: 'missing' })
+    // in-root reads are unchanged
+    expect(await invoke('file:read', join(ws, 'util.ts'))).toEqual({
+      kind: 'text',
+      content: 'export function Bar() {}\n'
+    })
+  })
+
+  it('file:read stays graceful when the session closes mid-read', async () => {
+    const read = invoke('file:read', join(ws, 'nope.go'))
+    const closing = openRepo(noopGetWindow, missingRoot)
+    expect(await read).toEqual({ kind: 'missing' })
+    await closing
+  })
+
+  it('file:externalKind is null in-root or outside, else the kind', async () => {
+    const ext = await mkdir('vm-ipc-ext-')
+    writeFileSync(join(ext, 'x.go'), 'package x\n')
+    lspBehavior.roots = [{ kind: 'go-modcache', dir: ext }]
+    expect(await invoke('file:externalKind', join(ext, 'x.go'))).toBe('go-modcache')
+    expect(await invoke('file:externalKind', join(ws, 'main.go'))).toBeNull()
+    expect(await invoke('file:externalKind', join(tmpdir(), 'nope', 'x.go'))).toBeNull()
+  })
+
+  it('symbol:definitions returns LSP locations with source lsp', async () => {
+    const loc = { path: 'main.go', absPath: join(ws, 'main.go'), line: 3, column: 5 }
+    lspBehavior.query = async () => ({ kind: 'answer', locations: [loc] })
+    const res = await invoke<SymbolLocationsResult>('symbol:definitions', goQ())
+    expect(res).toEqual({ locations: [loc], truncated: false, source: 'lsp' })
+    expect(managers[0].query).toHaveBeenCalledWith(
+      'definition',
+      expect.objectContaining({ word: 'Foo', line: 5, column: 15 })
+    )
+  })
+
+  it('accepts a lowercase-drive absPath from Monaco', async () => {
+    lspBehavior.query = async () => ({ kind: 'answer', locations: [] })
+    const lower = goQ().absPath.replace(/^[A-Z]:/, (d) => d.toLowerCase())
+    const res = await invoke<SymbolLocationsResult>('symbol:definitions', { ...goQ(), absPath: lower })
+    expect(res.source).toBe('lsp')
+  })
+
+  it('an empty LSP answer is the answer', async () => {
+    lspBehavior.query = async () => ({ kind: 'answer', locations: [] })
+    const res = await invoke<SymbolLocationsResult>('symbol:references', goQ())
+    expect(res).toEqual({ locations: [], truncated: false, source: 'lsp' })
+    expect(managers[0].query).toHaveBeenCalledWith('references', expect.anything())
+  })
+
+  it('symbol:definitions labels heuristic fallback', async () => {
+    lspBehavior.query = async () => ({ kind: 'fallback', reason: 'starting' })
+    const res = await invoke<SymbolLocationsResult>('symbol:definitions', goQ())
+    expect(res.source).toBe('heuristic')
+    expect(res.approximate).toEqual({ language: 'go', reason: 'starting' })
+    expect(res.locations.map((l) => [l.path, l.line])).toEqual([['main.go', 3]])
+  })
+
+  it('symbol:references labels heuristic fallback', async () => {
+    lspBehavior.query = async () => ({ kind: 'fallback', reason: 'not-installed' })
+    const res = await invoke<SymbolLocationsResult>('symbol:references', goQ())
+    expect(res.source).toBe('heuristic')
+    expect(res.approximate).toEqual({ language: 'go', reason: 'not-installed' })
+    expect(res.locations.map((l) => l.line).sort()).toEqual([3, 5])
+  })
+
+  it('a path outside every allowed root falls back without asking the manager', async () => {
+    const outside = await mkdir('vm-ipc-outside-')
+    writeFileSync(join(outside, 'x.go'), 'package x\n')
+    const res = await invoke<SymbolLocationsResult>('symbol:definitions', { ...goQ(), absPath: join(outside, 'x.go') })
+    expect(res.source).toBe('heuristic')
+    expect(res.approximate).toEqual({ language: 'go', reason: 'unavailable' })
+    expect(managers[0].query).not.toHaveBeenCalled()
+  })
+
+  it('other languages use the heuristic without asking the manager', async () => {
+    const res = await invoke<SymbolLocationsResult>('symbol:definitions', {
+      word: 'Bar',
+      absPath: join(ws, 'util.ts'),
+      line: 1,
+      column: 17
+    })
+    expect(res.source).toBe('heuristic')
+    expect(res.approximate).toBeUndefined()
+    expect(res.locations.map((l) => l.path)).toEqual(['util.ts'])
+    expect(managers[0].query).not.toHaveBeenCalled()
+  })
+
+  it('never delivers a previous session LSP answer into a new session', async () => {
+    let release!: (a: LspAnswer) => void
+    lspBehavior.query = () => new Promise<LspAnswer>((r) => (release = r))
+    const pending = invoke<SymbolLocationsResult>('symbol:definitions', goQ())
+    await vi.waitFor(() => expect(managers[0].query).toHaveBeenCalled())
+    const other = await mkdir('vm-ipc-other-')
+    await openRepo(noopGetWindow, other)
+    release({ kind: 'answer', locations: [{ path: 'main.go', absPath: join(ws, 'main.go'), line: 3, column: 5 }] })
+    const res = await pending
+    expect(res.source).not.toBe('lsp')
+    expect(res.locations.some((l) => l.absPath.startsWith(ws))).toBe(false)
+  })
+
+  it('symbol and externalKind handlers are graceful with no session', async () => {
+    await openRepo(noopGetWindow, missingRoot)
+    expect(await invoke('symbol:definitions', goQ())).toEqual({ locations: [], truncated: false })
+    expect(await invoke('symbol:references', goQ())).toEqual({ locations: [], truncated: false })
+    expect(await invoke('file:externalKind', join(ws, 'main.go'))).toBeNull()
+    expect(await invoke('file:read', join(ws, 'main.go'))).toEqual({ kind: 'missing' })
   })
 })
