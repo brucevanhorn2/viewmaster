@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, dialog, shell } from 'electron'
 import { join, dirname } from 'path'
 import { registerIpc, disposeIpc } from './ipc'
+import { installQuitDisposal } from './quitDisposal'
 import { getRecentFolders, getWindowBounds, setWindowBounds } from './store'
 import { getPathArgFromArgv } from './argv'
 import icon from '../../resources/icon.png?asset'
@@ -252,15 +253,6 @@ app.on('window-all-closed', async () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// app.quit() / Cmd+Q / menu Quit do not emit window-all-closed, so language
-// server children (issue #22) would otherwise outlive the app. Hold the quit
-// once until the session (and its servers) are disposed.
-let disposedForQuit = false
-app.on('will-quit', (event) => {
-  if (disposedForQuit) return
-  event.preventDefault()
-  disposedForQuit = true
-  void disposeIpc()
-    .catch(() => {})
-    .finally(() => app.quit())
-})
+// Dispose language servers (issue #22) on every quit path; the re-quit is
+// deferred a tick, or Electron ignores it and the app never exits.
+installQuitDisposal(app, disposeIpc)
