@@ -36,7 +36,10 @@ function goEnvGopath(env: NodeJS.ProcessEnv): Promise<string | null> {
   })
 }
 
-/** gopls on PATH, else <GOPATH>/bin/gopls. Never throws. */
+/**
+ * gopls on PATH, else <GOPATH>/bin/gopls, else ~/go/bin/gopls (Go's default GOPATH, for a GUI
+ * launch whose PATH has neither gopls nor go). Never throws.
+ */
 export async function findGopls(
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform = process.platform
@@ -53,6 +56,11 @@ export async function findGopls(
     const first = gopath?.split(platform === 'win32' ? ';' : ':')[0]
     if (first) {
       const candidate = join(first, 'bin', exe)
+      if (await isExecutable(candidate, platform)) return candidate
+    }
+    const home = envGet(env, platform === 'win32' ? 'USERPROFILE' : 'HOME')
+    if (home) {
+      const candidate = join(home, 'go', 'bin', exe)
       if (await isExecutable(candidate, platform)) return candidate
     }
   } catch {

@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'child_process'
-import { existsSync, readFileSync } from 'fs'
+import { readFileSync, realpathSync } from 'fs'
+import { access } from 'fs/promises'
 import {
   createProtocolConnection,
   StreamMessageReader,
@@ -86,7 +87,15 @@ export class LspClient {
     opts: LspClientOptions = {}
   ) {
     this.startTimeoutMs = opts.startTimeoutMs ?? START_TIMEOUT_MS
+    try {
+      this.realRoot = realpathSync.native(workspaceRoot)
+    } catch {
+      this.realRoot = workspaceRoot
+    }
   }
+
+  /** Servers report real paths; a root opened through a symlink/junction differs from it. */
+  private readonly realRoot: string
 
   state(): ClientState {
     return this._state
@@ -314,10 +323,18 @@ export class LspClient {
    */
   async notifyFilesChanged(absPaths: string[]): Promise<void> {
     if (this._state !== 'ready' || !this.conn || absPaths.length === 0) return
-    const changes = absPaths.map((p) => ({
-      uri: toFileUri(p),
-      type: existsSync(p) ? FILE_CHANGED : FILE_DELETED
-    }))
+    // Async stats: a checkout or pip install can batch thousands of paths, and sync stats
+    // here would block the main process.
+    const changes = await Promise.all(
+      absPaths.map(async (p) => ({
+        uri: toFileUri(p),
+        type: await access(p).then(
+          () => FILE_CHANGED,
+          () => FILE_DELETED
+        )
+      }))
+    )
+    if (this._state !== 'ready' || !this.conn) return
     try {
       await this.raceDead(this.conn.sendNotification('workspace/didChangeWatchedFiles', { changes }))
     } catch {
@@ -352,7 +369,7 @@ export class LspClient {
         }, timeoutMs)
       })
       const result = await Promise.race([this.raceDead(request), timeout])
-      return lspLocationsToSymbolLocations(result as never, this.workspaceRoot)
+      return lspLocationsToSymbolLocations(result as never, this.workspaceRoot, this.realRoot)
     } finally {
       clearTimeout(timer)
       cts.dispose()

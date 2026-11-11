@@ -23,7 +23,8 @@ function toSymbolLocation(
   uri: string,
   line0: number,
   character: number,
-  workspaceRoot: string
+  workspaceRoot: string,
+  realRoot: string
 ): SymbolLocation | null {
   let fsPath: string
   try {
@@ -32,8 +33,13 @@ function toSymbolLocation(
     return null // non-file URI (e.g. untitled:, jar:)
   }
   const line = line0 + 1
-  if (isInsideRoot(fsPath, workspaceRoot)) {
-    const rel = relative(workspaceRoot, fsPath)
+  const base = isInsideRoot(fsPath, workspaceRoot)
+    ? workspaceRoot
+    : realRoot !== workspaceRoot && isInsideRoot(fsPath, realRoot)
+      ? realRoot
+      : null
+  if (base) {
+    const rel = relative(base, fsPath)
     // join() against the caller's root keeps its drive-letter casing, which
     // is what the tree listing / renderer use for absPath.
     return { path: rel.split(sep).join('/'), absPath: join(workspaceRoot, rel), line, column: character }
@@ -47,10 +53,13 @@ function toSymbolLocation(
  * Converts an LSP definition/reference answer into SymbolLocations. In-root
  * files get a repo-relative `path`; files outside get their absolute path
  * with forward slashes. Duplicates (same absPath:line:column) are dropped.
+ * `realRoot` (the root's realpath) maps answers reported through a resolved
+ * symlink/junction back under `workspaceRoot`.
  */
 export function lspLocationsToSymbolLocations(
   result: Location | Location[] | LocationLink[] | null,
-  workspaceRoot: string
+  workspaceRoot: string,
+  realRoot: string = workspaceRoot
 ): SymbolLocation[] {
   if (!result) return []
   const items: Array<Location | LocationLink> = Array.isArray(result) ? result : [result]
@@ -60,7 +69,7 @@ export function lspLocationsToSymbolLocations(
     const [uri, pos] = isLocationLink(item)
       ? [item.targetUri, item.targetSelectionRange.start]
       : [item.uri, item.range.start]
-    const loc = toSymbolLocation(uri, pos.line, pos.character, workspaceRoot)
+    const loc = toSymbolLocation(uri, pos.line, pos.character, workspaceRoot, realRoot)
     if (!loc) continue
     const key = `${loc.absPath}:${loc.line}:${loc.column}`
     if (seen.has(key)) continue

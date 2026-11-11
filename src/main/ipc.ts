@@ -590,6 +590,9 @@ async function lspFirst(
   // session's locations (or the old word's matches) to the new one.
   if (session !== activeSession) return { locations: [], truncated: false }
   if (answer.kind === 'answer') return { locations: answer.locations, truncated: false, source: 'lsp' }
+  // Superseded by a newer query while the server worked: nobody is waiting for a fallback,
+  // so don't scan, and don't produce an "approximate" notice for it.
+  if (signal.aborted) return { locations: [], truncated: false }
   return {
     ...(await heuristic(activeSession, q.word, signal)),
     source: 'heuristic',

@@ -21,6 +21,16 @@ describe('lspLocationsToSymbolLocations', () => {
     expect(out).toEqual([{ path: 'pkg/a.go', absPath: abs, line: 10, column: 4 }])
   })
 
+  it('maps a location under the real root (opened via symlink/junction) back under the opened root', () => {
+    const real = process.platform === 'win32' ? ['C:', 'real', 'repo'].join(String.fromCharCode(92)) : '/private/repo'
+    const out = lspLocationsToSymbolLocations(
+      { uri: uriFor(join(real, 'pkg', 'a.go')), range: range(0, 0) },
+      root,
+      real
+    )
+    expect(out).toEqual([{ path: 'pkg/a.go', absPath: join(root, 'pkg', 'a.go'), line: 1, column: 0 }])
+  })
+
   it('translates a location link via targetSelectionRange', () => {
     const abs = join(root, 'b.py')
     const out = lspLocationsToSymbolLocations(

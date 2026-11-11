@@ -309,6 +309,19 @@ describe('LSP wiring', () => {
     expect(res.locations.map((l) => [l.path, l.line])).toEqual([['main.go', 3]])
   })
 
+  it('a superseded query does not run the heuristic or label a fallback', async () => {
+    const releases: Array<(a: LspAnswer) => void> = []
+    lspBehavior.query = () => new Promise<LspAnswer>((r) => releases.push(r))
+    const first = invoke<SymbolLocationsResult>('symbol:definitions', goQ())
+    await vi.waitFor(() => expect(releases).toHaveLength(1))
+    const second = invoke<SymbolLocationsResult>('symbol:definitions', goQ())
+    await vi.waitFor(() => expect(releases).toHaveLength(2))
+    releases[0]({ kind: 'fallback', reason: 'starting' })
+    expect(await first).toEqual({ locations: [], truncated: false })
+    releases[1]({ kind: 'answer', locations: [] })
+    expect((await second).source).toBe('lsp')
+  })
+
   it('symbol:references labels heuristic fallback', async () => {
     lspBehavior.query = async () => ({ kind: 'fallback', reason: 'not-installed' })
     const res = await invoke<SymbolLocationsResult>('symbol:references', goQ())
