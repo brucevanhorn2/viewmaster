@@ -55,6 +55,21 @@ describe('reportResult', () => {
     ])
   })
 
+  it('does not consume the hint when nobody is subscribed', () => {
+    const r = { locations: [], truncated: false, source: 'heuristic' as const, approximate: { language: 'go' as const, reason: 'not-installed' as const } }
+    unsub()
+    reportResult(r) // no subscriber: the hint is not "shown"
+    const got: unknown[] = []
+    const off = subscribeNotice((n) => got.push(n))
+    reportResult(r)
+    reportResult(r)
+    off()
+    expect(got).toEqual([
+      { text: 'approximate — gopls not installed', hint: GO_HINT },
+      { text: 'approximate — gopls not installed', hint: null }
+    ])
+  })
+
   it('unsubscribe stops delivery', () => {
     const got: unknown[] = []
     const off = subscribeNotice((n) => got.push(n))

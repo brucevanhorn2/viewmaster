@@ -37,7 +37,8 @@ export function reportResult(r: SymbolLocationsResult): void {
   let hint = installHint(r.approximate)
   if (hint) {
     if (hintShown) hint = null
-    else hintShown = true
+    // Only counts as shown once someone actually received it.
+    else if (listeners.size > 0) hintShown = true
   }
   const notice: SymbolNotice = { text: noticeText(r.approximate), hint }
   for (const cb of [...listeners]) cb(notice)

@@ -1,22 +1,30 @@
 import { useEffect, useState } from 'react'
-import { subscribeNotice, type SymbolNotice } from '../navigation/symbolNotice'
-
-const SHORT_MS = 4000
-const LONG_MS = 8000
+import { subscribeNotice } from '../navigation/symbolNotice'
+import { nextNotice, type ShownNotice } from './statusNoticeState'
 
 export default function StatusNotice(): React.JSX.Element | null {
-  const [notice, setNotice] = useState<SymbolNotice | null>(null)
+  const [shown, setShown] = useState<ShownNotice | null>(null)
 
-  useEffect(() => subscribeNotice(setNotice), [])
+  useEffect(
+    () =>
+      subscribeNotice((n) => {
+        const now = Date.now() // read outside the updater so it stays pure
+        setShown((cur) => nextNotice(cur, n, now))
+      }),
+    []
+  )
 
-  // Depending on the notice object restarts the timer on every newer notice.
+  // Keyed on the deadline: a newer notice restarts the timer, but a text
+  // update that keeps a showing install hint does not shorten (or extend) it.
+  const until = shown?.until
   useEffect(() => {
-    if (!notice) return
-    const id = window.setTimeout(() => setNotice(null), notice.hint ? LONG_MS : SHORT_MS)
+    if (until === undefined) return
+    const id = window.setTimeout(() => setShown(null), Math.max(0, until - Date.now()))
     return () => window.clearTimeout(id)
-  }, [notice])
+  }, [until])
 
-  if (!notice) return null
+  if (!shown) return null
+  const { notice } = shown
   return (
     <div className="status-notice" role="status">
       <div className="status-notice-text">{notice.text}</div>
