@@ -1,7 +1,7 @@
 // src/renderer/src/components/MarkdownSideBySideView.tsx
 import { useEffect, useRef, useState } from 'react'
 import { renderMarkdownToHtml } from '../markdown/render'
-import { runMermaidIn } from '../markdown/mermaidRunner'
+import { useDocumentPanZoom } from '../markdown/useDocumentPanZoom'
 import { classifyLinkHref } from '../markdown/links'
 import { scrollToId } from '../markdown/scrollToId'
 
@@ -27,11 +27,7 @@ function usePaneHtml(
     }
   }, [source, pathKey])
 
-  useEffect(() => {
-    const container = ref.current
-    if (!container || !html) return
-    runMermaidIn(container)
-  }, [html])
+  useDocumentPanZoom(ref, html, pathKey)
 
   return [html, ref, htmlForKey]
 }

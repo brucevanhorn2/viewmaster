@@ -1,7 +1,7 @@
 // src/renderer/src/components/MarkdownView.tsx
 import { useEffect, useRef, useState } from 'react'
 import { renderMarkdown, renderMarkdownToHtml, sanitizeHtml, escapeHtml } from '../markdown/render'
-import { runMermaidIn } from '../markdown/mermaidRunner'
+import { useDocumentPanZoom } from '../markdown/useDocumentPanZoom'
 import { composeMarks } from '../markdown/marksDiff'
 import { classifyLinkHref } from '../markdown/links'
 import { scrollToId } from '../markdown/scrollToId'
@@ -85,11 +85,7 @@ export default function MarkdownView({
     }
   }, [content, baseContent, absPath])
 
-  useEffect(() => {
-    const container = ref.current
-    if (!container || !html) return
-    runMermaidIn(container)
-  }, [html])
+  useDocumentPanZoom(ref, html, absPath)
 
   // Scroll to a heading requested by a cross-document navigation (set by
   // App.tsx's onNavigateToFile) once this document's content has rendered.
