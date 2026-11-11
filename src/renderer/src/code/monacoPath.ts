@@ -40,3 +40,22 @@ export function sameFsPath(a: string, b: string): boolean {
   }
   return a === b
 }
+
+/**
+ * The forward-slash path of `absPath` relative to `root`, or null when it is
+ * not strictly inside `root`. Separators are unified and, for drive-letter
+ * paths (Windows semantics, as in sameFsPath), case is ignored. The match is
+ * on a segment boundary, so `C:\repo2` is not inside `C:\repo`.
+ */
+export function relativeToRoot(absPath: string, root: string): string | null {
+  const bs = String.fromCharCode(92)
+  const fwd = (p: string): string => p.split(bs).join('/')
+  const win = /^[a-zA-Z]:/.test(absPath) || /^[a-zA-Z]:/.test(root)
+  const r = fwd(root).replace(/\/+$/, '')
+  const p = fwd(absPath)
+  if (!r) return null
+  const cmp = (s: string): string => (win ? s.toLowerCase() : s)
+  if (!cmp(p).startsWith(cmp(r) + '/')) return null
+  const rel = p.slice(r.length + 1)
+  return rel === '' ? null : rel
+}

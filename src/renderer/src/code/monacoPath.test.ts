@@ -7,7 +7,7 @@ import { URI as RawURI } from 'monaco-editor/esm/vs/base/common/uri.js'
 import type { Uri } from 'monaco-editor'
 const URI = RawURI as typeof Uri
 type URI = Uri
-import { absPathOfModelUri, encodeForMonacoPath, sameFsPath } from './monacoPath'
+import { absPathOfModelUri, encodeForMonacoPath, relativeToRoot, sameFsPath } from './monacoPath'
 
 describe('encodeForMonacoPath', () => {
   it('percent-encodes a literal # so it is not read as a URI fragment delimiter', () => {
@@ -77,5 +77,24 @@ describe('sameFsPath', () => {
   it('does not conflate a drive path with a drive-less path', () => {
     const bs = String.fromCharCode(92)
     expect(sameFsPath('C:/a/b.go', bs + 'a' + bs + 'b.go')).toBe(false)
+  })
+})
+
+describe('relativeToRoot', () => {
+  it('matches across drive-letter case and separators', () => {
+    expect(relativeToRoot('c:\\repo\\pkg\\a.go', 'C:/repo')).toBe('pkg/a.go')
+    expect(relativeToRoot('C:\\repo\\a.go', 'C:\\repo\\')).toBe('a.go')
+  })
+  it('respects segment boundaries', () => {
+    expect(relativeToRoot('C:\\repo2\\a.go', 'C:\\repo')).toBeNull()
+    expect(relativeToRoot('/home/u/repo2/a.go', '/home/u/repo')).toBeNull()
+  })
+  it('handles posix paths exactly', () => {
+    expect(relativeToRoot('/home/u/repo/src/a.py', '/home/u/repo')).toBe('src/a.py')
+    expect(relativeToRoot('/home/u/Repo/a.py', '/home/u/repo')).toBeNull()
+  })
+  it('returns null for outside paths and the root itself', () => {
+    expect(relativeToRoot('C:\\go\\src\\fmt\\print.go', 'C:/repo')).toBeNull()
+    expect(relativeToRoot('C:\\repo', 'C:/repo')).toBeNull()
   })
 })

@@ -25,7 +25,7 @@ import {
   type NavigationTarget
 } from './navigation/history'
 import { isStaleRequest } from './navigation/staleRequest'
-import { absPathOfModelUri, sameFsPath } from './code/monacoPath'
+import { absPathOfModelUri, relativeToRoot, sameFsPath } from './code/monacoPath'
 import StatusNotice from './components/StatusNotice'
 
 function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Element {
@@ -162,11 +162,12 @@ export default function App(): React.JSX.Element {
   const resolveChangedFile = useCallback(
     (absPath: string): ChangedFile | null => {
       if (!repo || (repo.kind !== 'repo' && repo.kind !== 'folder')) return null
-      const existing = repo.files.find((f) => f.absPath === absPath)
+      const existing = repo.files.find((f) => sameFsPath(f.absPath, absPath))
       if (existing) return existing
-      const rel = absPath.startsWith(repo.root)
-        ? absPath.slice(repo.root.length).replace(/^\/+/, '')
-        : absPath
+      // Inside the root: repo-relative path. Outside (stdlib, module cache,
+      // venv...): the forward-slash absolute path.
+      const rel =
+        relativeToRoot(absPath, repo.root) ?? absPath.split(String.fromCharCode(92)).join('/')
       return { path: rel, absPath, status: 'unchanged' }
     },
     [repo]
@@ -196,7 +197,12 @@ export default function App(): React.JSX.Element {
   // Load local history for the selected file (git repos only), refreshing when
   // the watcher reports a change.
   useEffect(() => {
-    if (!selected || repo?.kind !== 'repo') {
+    // External files (outside the opened folder) have no local history.
+    if (
+      !selected ||
+      repo?.kind !== 'repo' ||
+      relativeToRoot(selected.absPath, repo.root) === null
+    ) {
       setVersions([])
       return
     }

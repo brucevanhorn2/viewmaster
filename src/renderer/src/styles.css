@@ -12,6 +12,7 @@
   --status-modified: #e2c08d;
   --status-staged: #75beff;
   --status-committed: #c5c5c5;
+  --external-tint: #3a2f4a;
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Ubuntu, 'Helvetica Neue', sans-serif;
   --font-mono: 'SF Mono', Monaco, Menlo, Consolas, 'Courier New', monospace;
 }
@@ -342,6 +343,21 @@ body {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   min-height: 34px;
+}
+
+.toolbar.external {
+  background: var(--external-tint);
+}
+
+.toolbar-external-label {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 3px;
+  background: var(--bg-active);
+  color: var(--fg);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .toolbar-path {
