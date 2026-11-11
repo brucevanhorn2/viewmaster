@@ -139,6 +139,8 @@ export function attachPanZoom(
   }
   const onMove = (e: PointerEvent): void => {
     if (!dragging || !fit) return
+    // The pointerup was missed (focus loss, failed capture): end the drag, don't keep panning.
+    if (e.buttons === 0) return onUp()
     if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > DRAG_THRESHOLD) moved = true
     state = panBy(state, e.clientX - last.x, e.clientY - last.y, fit, vp(), maxZoom)
     last = { x: e.clientX, y: e.clientY }
@@ -173,6 +175,7 @@ export function attachPanZoom(
   viewport.addEventListener('pointermove', onMove as EventListener)
   viewport.addEventListener('pointerup', onUp)
   viewport.addEventListener('pointercancel', onCancel)
+  viewport.addEventListener('lostpointercapture', onUp)
   viewport.addEventListener('dragstart', onDragStart)
   viewport.addEventListener('click', onClick, true)
   controls.addEventListener('click', onControls)
@@ -198,6 +201,7 @@ export function attachPanZoom(
       viewport.removeEventListener('pointermove', onMove as EventListener)
       viewport.removeEventListener('pointerup', onUp)
       viewport.removeEventListener('pointercancel', onCancel)
+      viewport.removeEventListener('lostpointercapture', onUp)
       viewport.removeEventListener('dragstart', onDragStart)
       viewport.removeEventListener('click', onClick, true)
       controls.remove()

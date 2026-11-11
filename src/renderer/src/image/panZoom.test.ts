@@ -24,8 +24,12 @@ function wheel(init: WheelEventInit): WheelEvent {
   viewport.dispatchEvent(e)
   return e
 }
-function ptr(type: string, x: number, y: number, target: EventTarget = viewport): void {
-  target.dispatchEvent(new MouseEvent(type, { button: 0, clientX: x, clientY: y, bubbles: true, cancelable: true }))
+function ptr(type: string, x: number, y: number, target: EventTarget = viewport, buttons?: number): void {
+  // Primary button held for down/move unless told otherwise; released on up.
+  const b = buttons ?? (type === 'pointerup' ? 0 : 1)
+  target.dispatchEvent(
+    new MouseEvent(type, { button: 0, buttons: b, clientX: x, clientY: y, bubbles: true, cancelable: true })
+  )
 }
 const btn = (k: string): HTMLElement => viewport.querySelector(`[data-pz=${k}]`) as HTMLElement
 
@@ -110,6 +114,17 @@ describe('attachPanZoom', () => {
     ptr('pointerup', 502, 401)
     content.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('a move with no button held ends a drag whose pointerup was missed', () => {
+    const c = attach()
+    c.zoomBy(4)
+    ptr('pointerdown', 400, 350)
+    ptr('pointermove', 420, 360)
+    const s1 = c.getState()
+    ptr('pointermove', 480, 400, viewport, 0)
+    expect(c.getState()).toEqual(s1)
+    expect(viewport.classList.contains('pz-dragging')).toBe(false)
   })
 
   it('buttons work and zoom is capped at 8', () => {

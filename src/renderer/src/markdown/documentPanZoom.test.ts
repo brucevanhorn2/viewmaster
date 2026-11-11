@@ -195,6 +195,23 @@ describe('review fixes', () => {
     expect(boxes[1].classList.contains('pz-doc-inline')).toBe(false)
   })
 
+  it('skips badge-shaped images (wide but short)', () => {
+    const badge = document.createElement('img')
+    loaded(badge, 100, 20)
+    container.append(badge)
+    attachDocumentPanZoom(container, null)
+    expect(container.querySelector('.pz-doc')).toBeNull()
+  })
+
+  it('wraps a loaded SVG <img> with no intrinsic size using its rendered size', () => {
+    const img = document.createElement('img')
+    loaded(img, 0, 0)
+    stubSize(img, 600, 400)
+    container.append(img)
+    attachDocumentPanZoom(container, null)
+    expect(img.parentElement?.classList.contains('pz-doc')).toBe(true)
+  })
+
   it('zoom ceiling for a CSS-shrunk image comes from its intrinsic size', () => {
     const img = document.createElement('img')
     loaded(img, 6000, 4500)

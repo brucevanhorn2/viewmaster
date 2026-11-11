@@ -1,7 +1,7 @@
 import { attachPanZoom, type PanZoomController } from '../image/panZoom'
 import type { PanZoomState } from '../image/panZoomMath'
 
-/** Images smaller than this on both axes are skipped (icons/badges). */
+/** Images smaller than this on either axis are skipped (icons/badges). */
 export const MIN_ZOOMABLE_PX = 64
 
 /**
@@ -22,7 +22,15 @@ interface Entry {
   last: PanZoomState
 }
 
-const isLoaded = (el: HTMLImageElement): boolean => el.complete && el.naturalWidth > 0
+/** Rendered size stands in for an SVG <img> with no intrinsic size (naturalWidth 0 once loaded). */
+const sizeOf = (el: HTMLImageElement): { width: number; height: number } => {
+  if (el.naturalWidth > 0) return { width: el.naturalWidth, height: el.naturalHeight }
+  const r = el.getBoundingClientRect()
+  return { width: r.width, height: r.height }
+}
+
+const isLoaded = (el: HTMLImageElement): boolean =>
+  el.complete && (el.naturalWidth > 0 || el.getBoundingClientRect().width > 0)
 
 function candidates(container: HTMLElement): Element[] {
   const sel = 'pre.mermaid[data-processed]:not(.mermaid-error) > svg, img'
@@ -32,8 +40,11 @@ function candidates(container: HTMLElement): Element[] {
   )
 }
 
-const qualifies = (img: HTMLImageElement): boolean =>
-  img.naturalWidth >= MIN_ZOOMABLE_PX || img.naturalHeight >= MIN_ZOOMABLE_PX
+/** Both axes must be big enough: badges (~100x20) and thin rules are skipped. */
+const qualifies = (img: HTMLImageElement): boolean => {
+  const s = sizeOf(img)
+  return s.width >= MIN_ZOOMABLE_PX && s.height >= MIN_ZOOMABLE_PX
+}
 
 /**
  * Wraps each zoomable diagram/image in `container` in a fixed-size pan/zoom box that keeps the

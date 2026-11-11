@@ -1017,7 +1017,8 @@ body {
   pointer-events: none;
   transition: opacity 0.12s;
 }
-.pz-hover.pz-viewport:hover .pz-controls {
+.pz-hover.pz-viewport:hover .pz-controls,
+.pz-hover.pz-viewport:focus-within .pz-controls {
   opacity: 1;
   pointer-events: auto;
 }
