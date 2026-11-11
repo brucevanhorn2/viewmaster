@@ -1018,3 +1018,9 @@ body {
   opacity: 1;
   pointer-events: auto;
 }
+
+/* Pan/zoom box around a diagram/image in rendered markdown: fixed natural size, no layout jump. */
+.pz-doc {
+  display: block;
+  max-width: 100%;
+}
