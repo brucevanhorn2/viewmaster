@@ -1,5 +1,5 @@
 // src/renderer/src/components/MarkdownView.tsx
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { renderMarkdown, renderMarkdownToHtml, sanitizeHtml, escapeHtml } from '../markdown/render'
 import { useDocumentPanZoom } from '../markdown/useDocumentPanZoom'
 import { composeMarks } from '../markdown/marksDiff'
@@ -86,6 +86,9 @@ export default function MarkdownView({
   }, [content, baseContent, absPath])
 
   useDocumentPanZoom(ref, html, absPath)
+  // Stable prop object: React 19 re-assigns innerHTML whenever this object changes,
+  // which would wipe mermaid svgs and pan/zoom wrappers on every re-render.
+  const innerHtml = useMemo(() => ({ __html: html }), [html])
 
   // Scroll to a heading requested by a cross-document navigation (set by
   // App.tsx's onNavigateToFile) once this document's content has rendered.
@@ -120,7 +123,7 @@ export default function MarkdownView({
         ref={ref}
         className="markdown-body"
         onClick={onClick}
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={innerHtml}
       />
     </div>
   )
