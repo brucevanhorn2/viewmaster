@@ -25,6 +25,8 @@ import {
   type NavigationTarget
 } from './navigation/history'
 import { isStaleRequest } from './navigation/staleRequest'
+import { absPathOfModelUri, sameFsPath } from './code/monacoPath'
+import StatusNotice from './components/StatusNotice'
 
 function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Element {
   const [recents, setRecents] = useState<string[]>([])
@@ -252,7 +254,8 @@ export default function App(): React.JSX.Element {
         // ours), which moves the cursor within the current model natively
         // — no history entry pushed, matching the design spec's decision
         // 5. Only a genuinely different file goes through navigateTo.
-        if (source.getModel()?.uri.fsPath === resource.fsPath) {
+        const sourceModel = source.getModel()
+        if (sourceModel && sameFsPath(absPathOfModelUri(sourceModel.uri), resource.fsPath)) {
           return false
         }
         const line =
@@ -370,6 +373,7 @@ export default function App(): React.JSX.Element {
           />
         </Allotment.Pane>
       </Allotment>
+      <StatusNotice />
     </div>
   )
 }

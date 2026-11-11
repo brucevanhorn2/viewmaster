@@ -26,3 +26,17 @@ export function absPathOfModelUri(uri: { scheme: string; path: string; fsPath: s
   if (/^[A-Za-z]$/.test(uri.scheme)) return `${uri.scheme}:${uri.path}`
   return uri.fsPath
 }
+
+/**
+ * Whether two filesystem paths name the same file. The renderer cannot read
+ * `process.platform`, so a drive-letter path (`C:...`) on either side marks
+ * Windows semantics: separators are unified to `/` and case is ignored.
+ * Otherwise the comparison is exact.
+ */
+export function sameFsPath(a: string, b: string): boolean {
+  if (/^[a-zA-Z]:/.test(a) || /^[a-zA-Z]:/.test(b)) {
+    const norm = (p: string): string => p.split(String.fromCharCode(92)).join('/').toLowerCase()
+    return norm(a) === norm(b)
+  }
+  return a === b
+}

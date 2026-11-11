@@ -953,3 +953,32 @@ body {
   color: #d7ba7d;
   font-size: 11px;
 }
+
+.status-notice {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  max-width: 420px;
+  padding: 8px 12px;
+  background: var(--bg-sidebar);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  pointer-events: auto;
+}
+
+.status-notice-hint {
+  display: block;
+  margin-top: 6px;
+  padding: 4px 6px;
+  background: var(--bg);
+  color: var(--fg-dim);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  user-select: text;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

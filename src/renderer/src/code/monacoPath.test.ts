@@ -7,7 +7,7 @@ import { URI as RawURI } from 'monaco-editor/esm/vs/base/common/uri.js'
 import type { Uri } from 'monaco-editor'
 const URI = RawURI as typeof Uri
 type URI = Uri
-import { absPathOfModelUri, encodeForMonacoPath } from './monacoPath'
+import { absPathOfModelUri, encodeForMonacoPath, sameFsPath } from './monacoPath'
 
 describe('encodeForMonacoPath', () => {
   it('percent-encodes a literal # so it is not read as a URI fragment delimiter', () => {
@@ -57,5 +57,25 @@ describe('absPathOfModelUri', () => {
     const u = URI.file('C:\\Users\\x\\util.go')
     expect(absPathOfModelUri(u)).toBe(u.fsPath)
     expect(absPathOfModelUri(u).toLowerCase().replace(/\\/g, '/')).toBe('c:/users/x/util.go')
+  })
+})
+
+describe('sameFsPath', () => {
+  it('matches identical posix paths', () => {
+    expect(sameFsPath('/a/b.go', '/a/b.go')).toBe(true)
+    expect(sameFsPath('/a/b.go', '/a/c.go')).toBe(false)
+  })
+  it('treats posix paths case-sensitively', () => {
+    expect(sameFsPath('/a/B.go', '/a/b.go')).toBe(false)
+  })
+  it('ignores separator style and case for drive-letter paths', () => {
+    const bs = String.fromCharCode(92)
+    const win = (p: string): string => p.split('/').join(bs)
+    expect(sameFsPath('c:/Users/x/Main.go', win('C:/users/X/main.go'))).toBe(true)
+    expect(sameFsPath(win('C:/a/b.go'), win('C:/a/c.go'))).toBe(false)
+  })
+  it('does not conflate a drive path with a drive-less path', () => {
+    const bs = String.fromCharCode(92)
+    expect(sameFsPath('C:/a/b.go', bs + 'a' + bs + 'b.go')).toBe(false)
   })
 })

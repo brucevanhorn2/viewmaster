@@ -2,6 +2,7 @@ import * as monaco from 'monaco-editor'
 import { loader } from '@monaco-editor/react'
 import type { SymbolLocation, SymbolQuery } from '@shared/types'
 import { absPathOfModelUri } from './code/monacoPath'
+import { reportResult } from './navigation/symbolNotice'
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
@@ -109,8 +110,9 @@ monaco.languages.registerDefinitionProvider(heuristicLanguageIds, {
   async provideDefinition(model, position) {
     const word = wordUnderCursor(model, position)
     if (!word) return []
-    const { locations } = await window.viewmaster.findDefinitions(symbolQuery(model, position, word))
-    return toMonacoLocations(locations)
+    const result = await window.viewmaster.findDefinitions(symbolQuery(model, position, word))
+    reportResult(result)
+    return toMonacoLocations(result.locations)
   }
 })
 
@@ -118,7 +120,8 @@ monaco.languages.registerReferenceProvider(heuristicLanguageIds, {
   async provideReferences(model, position) {
     const word = wordUnderCursor(model, position)
     if (!word) return []
-    const { locations } = await window.viewmaster.findReferences(symbolQuery(model, position, word))
-    return toMonacoLocations(locations)
+    const result = await window.viewmaster.findReferences(symbolQuery(model, position, word))
+    reportResult(result)
+    return toMonacoLocations(result.locations)
   }
 })
