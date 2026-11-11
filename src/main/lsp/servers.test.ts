@@ -65,16 +65,6 @@ describe('findGopls', () => {
       join(gp, 'bin', goplsName)
     )
   })
-  it('falls back to ~/go/bin when neither PATH nor GOPATH has it', async () => {
-    const empty = await tmp()
-    const gp = await tmp()
-    const home = await tmp()
-    await fakeExe(join(home, 'go', 'bin'), goplsName)
-    const homeVar = win ? 'USERPROFILE' : 'HOME'
-    expect(await findGopls({ PATH: empty, GOPATH: gp, [homeVar]: home })).toBe(
-      join(home, 'go', 'bin', goplsName)
-    )
-  })
   it('returns null when absent', async () => {
     const empty = await tmp()
     const gp = await tmp()

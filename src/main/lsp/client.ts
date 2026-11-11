@@ -394,8 +394,18 @@ export class LspClient {
     return this.raceDead(this.conn.sendRequest(method, params))
   }
 
-  async dispose(): Promise<void> {
-    if (this.disposed) return
+  /**
+   * Idempotent: every call returns the same in-flight shutdown, so a second caller (e.g. app
+   * quit during a start-timeout dispose) still waits for SIGKILL rather than returning early.
+   */
+  dispose(): Promise<void> {
+    this.disposing ??= this.doDispose()
+    return this.disposing
+  }
+
+  private disposing: Promise<void> | undefined
+
+  private async doDispose(): Promise<void> {
     this.disposed = true
     const child = this.child
     if (!child || this.dead) {

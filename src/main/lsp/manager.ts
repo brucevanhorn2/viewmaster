@@ -14,6 +14,9 @@ import { languageForPath } from './translate'
 export const QUERY_TIMEOUT_MS = 4000
 /** A timeout within this window of start = 'starting', after = 'unavailable'. */
 export const STARTING_GRACE_MS = 120_000
+
+const isResponseError = (e: unknown): boolean =>
+  typeof e === 'object' && e !== null && typeof (e as { code?: unknown }).code === 'number'
 /** Replacements of a dead client before the language is given up for this folder. */
 export const MAX_RESTARTS = 3
 /** How long a "server not installed" verdict is trusted before re-checking. */
@@ -77,7 +80,11 @@ export class LspManager {
       const deadline = Date.now() + QUERY_TIMEOUT_MS
       const timer = setTimeout(() => finish(this.timeoutAnswer(instance)), QUERY_TIMEOUT_MS)
       this.run(kind, q, lang, deadline, (i) => (instance = i)).then(finish, (e) =>
-        finish(e instanceof LspTimeoutError ? this.timeoutAnswer(instance) : UNAVAILABLE)
+        // A server-side ResponseError (has a numeric code: ContentModified, "no views", ...) is
+        // what gopls/pyright answer while still loading, so it's treated like a timeout.
+        finish(
+          e instanceof LspTimeoutError || isResponseError(e) ? this.timeoutAnswer(instance) : UNAVAILABLE
+        )
       )
     })
   }

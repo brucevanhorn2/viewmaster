@@ -39,10 +39,14 @@ describe('reportResult', () => {
 
   afterEach(() => unsub())
 
-  it('emits nothing for lsp results or results without approximate', () => {
-    reportResult({ locations: [], truncated: false, source: 'lsp' })
+  it('emits nothing for results without approximate', () => {
     reportResult({ locations: [], truncated: false })
     expect(seen).toEqual([])
+  })
+
+  it('a real (lsp) answer clears an earlier approximate notice', () => {
+    reportResult({ locations: [], truncated: false, source: 'lsp' })
+    expect(seen).toEqual([null])
   })
 
   it('includes the hint on the first go/not-installed result and null on the second', () => {

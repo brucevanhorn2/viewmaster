@@ -137,6 +137,12 @@ describe('LspManager', () => {
     expect(await m.query('definition', goQ)).toEqual({ kind: 'answer', locations: [] })
   })
 
+  it('a server ResponseError soon after start (still loading) is starting', async () => {
+    const err = Object.assign(new Error('no views'), { code: -32801 })
+    const { m } = setup({ configure: (c) => (c.next = err) })
+    expect(await m.query('definition', goQ)).toEqual({ kind: 'fallback', reason: 'starting' })
+  })
+
   it('a server error is unavailable for that query but does not replace a live client', async () => {
     const { m, clients, createClient } = setup({ configure: (c) => (c.next = new Error('boom')) })
     expect(await m.query('definition', goQ)).toEqual({ kind: 'fallback', reason: 'unavailable' })

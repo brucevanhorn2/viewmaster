@@ -200,6 +200,15 @@ describe('LspClient', () => {
     10_000
   )
 
+  it('a second dispose waits for the shutdown already in progress', async () => {
+    const c = make('nodie')
+    await c.start()
+    const pid = c.pid()!
+    void c.dispose()
+    await c.dispose()
+    expect(alive(pid)).toBe(false)
+  }, 10_000)
+
   it('dispose kills the child', async () => {
     const c = make('ok')
     await c.start()

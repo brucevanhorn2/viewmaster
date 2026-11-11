@@ -35,13 +35,14 @@ export async function resolveExternal(
 }
 
 /** GOROOT and GOMODCACHE as allow-list roots; [] if go is missing or fails. */
-export async function goExternalRoots(env: NodeJS.ProcessEnv): Promise<ExternalRoot[]> {
+export async function goExternalRoots(env: NodeJS.ProcessEnv, cwd?: string): Promise<ExternalRoot[]> {
   try {
     const stdout = await new Promise<string>((resolve, reject) => {
       execFile(
         'go',
         ['env', '-json', 'GOROOT', 'GOMODCACHE'],
-        { env, timeout: 10_000, windowsHide: true },
+        // From the workspace, so a go.mod toolchain pin resolves the same GOROOT gopls uses.
+        { env, cwd, timeout: 10_000, windowsHide: true },
         (err, out) => (err ? reject(err) : resolve(out))
       )
     })

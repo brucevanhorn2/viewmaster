@@ -33,7 +33,12 @@ export function subscribeNotice(cb: (n: SymbolNotice | null) => void): () => voi
 }
 
 export function reportResult(r: SymbolLocationsResult): void {
-  if (r.source === 'lsp' || !r.approximate) return
+  if (r.source === 'lsp') {
+    // A real answer: an earlier "approximate" notice no longer applies.
+    for (const cb of [...listeners]) cb(null)
+    return
+  }
+  if (!r.approximate) return
   let hint = installHint(r.approximate)
   if (hint) {
     if (hintShown) hint = null
