@@ -374,6 +374,16 @@ describe('LSP wiring', () => {
     expect(managers[1].dispose).toHaveBeenCalledTimes(1)
   })
 
+  it('disposeIpc gives up on a language-server shutdown that never settles', async () => {
+    let release!: () => void
+    managers[0].dispose.mockImplementation(() => new Promise<void>((r) => (release = r)))
+    const t0 = Date.now()
+    await disposeIpc(300)
+    expect(Date.now() - t0).toBeLessThan(2000)
+    expect(managers[0].dispose).toHaveBeenCalledTimes(1)
+    release() // don't leave a pending disposal behind for later tests
+  })
+
   it('maps the document onto the root as opened when the root is a junction or symlink', async () => {
     const target = await mkdir('vm-ipc-target-')
     writeFileSync(join(target, 'main.go'), 'package main\n\nfunc Foo() {}\n')

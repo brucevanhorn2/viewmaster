@@ -654,12 +654,22 @@ async function heuristicReferences(
   }
 }
 
-export async function disposeIpc(): Promise<void> {
+/** Upper bound on how long disposeIpc waits for language servers to exit. */
+export const DISPOSE_BOUND_MS = 5000
+
+export async function disposeIpc(boundMs: number = DISPOSE_BOUND_MS): Promise<void> {
   try {
     await closeSession()
   } finally {
     // No orphaned language servers: wait for every shutdown, including ones
-    // started by earlier folder switches.
-    await Promise.all([...pendingLspDisposals])
+    // started by earlier folder switches — but never forever, so quit (and
+    // window-all-closed) always completes. Each client already escalates to
+    // SIGKILL; this only guards against a wait that never settles.
+    let timer: NodeJS.Timeout | undefined
+    await Promise.race([
+      Promise.all([...pendingLspDisposals]),
+      new Promise<void>((r) => (timer = setTimeout(r, boundMs)))
+    ])
+    clearTimeout(timer)
   }
 }

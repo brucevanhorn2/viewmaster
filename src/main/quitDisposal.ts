@@ -15,14 +15,26 @@ export interface QuittableApp {
  * Electron ignores it — the process then never exits. Waiting for the next
  * event-loop turn lets that cycle finish first.
  */
-export function installQuitDisposal(app: QuittableApp, dispose: () => Promise<void>): void {
+/** Longest a quit waits on dispose before quitting anyway. */
+export const QUIT_DISPOSE_BOUND_MS = 6000
+
+export function installQuitDisposal(
+  app: QuittableApp,
+  dispose: () => Promise<void>,
+  boundMs: number = QUIT_DISPOSE_BOUND_MS
+): void {
   let disposed = false
   app.on('will-quit', (event) => {
     if (disposed) return
     event.preventDefault()
     disposed = true
-    void dispose()
+    // Bounded, so a dispose that never settles cannot keep the app alive.
+    let timer: NodeJS.Timeout | undefined
+    void Promise.race([dispose(), new Promise<void>((r) => (timer = setTimeout(r, boundMs)))])
       .catch(() => {})
-      .finally(() => setImmediate(() => app.quit()))
+      .finally(() => {
+        clearTimeout(timer)
+        setImmediate(() => app.quit())
+      })
   })
 }

@@ -57,6 +57,16 @@ describe('installQuitDisposal', () => {
     expect(app.exited).toBe(true)
   })
 
+  it('still quits when dispose never settles, after the bound', async () => {
+    const app = new FakeApp()
+    installQuitDisposal(app, () => new Promise<void>(() => {}), 100)
+    app.quit()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(app.exited).toBe(false)
+    await new Promise((r) => setTimeout(r, 150))
+    expect(app.exited).toBe(true)
+  })
+
   it('still quits when dispose rejects', async () => {
     const app = new FakeApp()
     installQuitDisposal(app, () => Promise.reject(new Error('boom')))
