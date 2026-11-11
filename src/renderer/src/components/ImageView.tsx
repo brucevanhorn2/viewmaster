@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Placeholder from './Placeholder'
 import { attachPanZoom, type PanZoomController } from '../image/panZoom'
 import type { PanZoomState } from '../image/panZoomMath'
@@ -27,10 +27,13 @@ export default function ImageView({
     ctrlRef.current = null
   }, [])
 
+  // Layout-effect cleanup runs synchronously in the commit, before the new src can fire load;
+  // a passive cleanup could run late and destroy a controller attached for the new src.
+  useLayoutEffect(() => detach, [src, detach])
+
   useEffect(() => {
     setFailed(false)
-    return detach
-  }, [src, detach])
+  }, [src])
 
   const onLoad = useCallback((): void => {
     const viewport = viewportRef.current
