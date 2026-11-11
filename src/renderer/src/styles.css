@@ -1027,3 +1027,6 @@ body {
   display: block;
   max-width: 100%;
 }
+.pz-doc.pz-doc-inline {
+  display: inline-block;
+}

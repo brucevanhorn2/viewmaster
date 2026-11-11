@@ -29,7 +29,8 @@ export default function ImageView({
 
   // Layout-effect cleanup runs synchronously in the commit, before the new src can fire load;
   // a passive cleanup could run late and destroy a controller attached for the new src.
-  useLayoutEffect(() => detach, [src, detach])
+  // Keyed on resetKey too: two files with identical bytes share a src but must not share zoom.
+  useLayoutEffect(() => detach, [src, resetKey, detach])
 
   useEffect(() => {
     setFailed(false)
@@ -65,6 +66,8 @@ export default function ImageView({
   return (
     <div className="image-view" ref={viewportRef}>
       <img
+        // A new file remounts the <img> so it fires load (and attaches fresh) even if src is unchanged.
+        key={resetKey}
         ref={imgRef}
         src={src}
         alt=""

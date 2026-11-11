@@ -86,7 +86,7 @@ describe('attachDocumentPanZoom', () => {
     ]
     const d = attachDocumentPanZoom(container, saved)
     const s = d.states()
-    expect(s.map((x) => x.zoom)).toEqual([2, 3])
+    expect(s.map((x) => x?.zoom)).toEqual([2, 3])
     d.destroy()
   })
 
@@ -98,7 +98,7 @@ describe('attachDocumentPanZoom', () => {
     ])
     const s = d.states()
     expect(s).toHaveLength(3)
-    s.forEach((x) => expect(x.zoom).toBe(1))
+    s.forEach((x) => expect(x?.zoom).toBe(1))
   })
 
   it('destroy unwraps', () => {
@@ -135,7 +135,7 @@ describe('late-loading and mermaid-internal images', () => {
     loaded(late, 400, 300, true)
     late.dispatchEvent(new Event('load'))
     expect(late.parentElement?.classList.contains('pz-doc')).toBe(true)
-    expect(d.states().map((s) => s.zoom)).toEqual([1, 1])
+    expect(d.states().map((s) => s?.zoom)).toEqual([1, 1])
     d.destroy()
     expect(late.parentElement).toBe(container)
   })
@@ -159,5 +159,49 @@ describe('late-loading and mermaid-internal images', () => {
     container.append(pre)
     attachDocumentPanZoom(container, null)
     expect(img.closest('.pz-doc')).toBeNull()
+  })
+})
+
+describe('review fixes', () => {
+  it('restores a diagram zoom on reload while an image is still loading', () => {
+    const late = document.createElement('img')
+    loaded(late, 400, 300, false)
+    container.append(mermaidNode(), late)
+    const d = attachDocumentPanZoom(container, [{ zoom: 2, x: 0, y: 0 }, null])
+    expect(d.states()[0]?.zoom).toBe(2)
+    d.destroy()
+  })
+
+  it('a late image load wraps only that image and keeps existing zoom', () => {
+    const late = document.createElement('img')
+    loaded(late, 400, 300, false)
+    container.append(mermaidNode(), late)
+    const d = attachDocumentPanZoom(container, [{ zoom: 2, x: 0, y: 0 }, { zoom: 3, x: 0, y: 0 }])
+    const diagramBox = container.querySelector('.pz-doc')
+    loaded(late, 400, 300, true)
+    late.dispatchEvent(new Event('load'))
+    expect(container.querySelector('.pz-doc')).toBe(diagramBox)
+    expect(d.states().map((s) => s?.zoom)).toEqual([2, 3])
+    d.destroy()
+  })
+
+  it('wraps images inline so side-by-side images stay side by side', () => {
+    const img = document.createElement('img')
+    loaded(img, 400, 300)
+    container.append(img, mermaidNode())
+    attachDocumentPanZoom(container, null)
+    const boxes = container.querySelectorAll('.pz-doc')
+    expect(boxes[0].classList.contains('pz-doc-inline')).toBe(true)
+    expect(boxes[1].classList.contains('pz-doc-inline')).toBe(false)
+  })
+
+  it('zoom ceiling for a CSS-shrunk image comes from its intrinsic size', () => {
+    const img = document.createElement('img')
+    loaded(img, 6000, 4500)
+    stubSize(img, 400, 300)
+    container.append(img)
+    const d = attachDocumentPanZoom(container, [{ zoom: 20, x: 0, y: 0 }])
+    expect(d.states()[0]?.zoom).toBe(20)
+    d.destroy()
   })
 })

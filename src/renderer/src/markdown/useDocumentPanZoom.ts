@@ -18,7 +18,8 @@ export function useDocumentPanZoom(
   html: string,
   pathKey: string
 ): void {
-  // Always the latest pathKey, read by the async continuation.
+  // Read when the effect starts: html and its pathKey change together, while reading it after
+  // the async mermaid pass could tag one document's states with the next document's key.
   const pathKeyRef = useRef(pathKey)
   pathKeyRef.current = pathKey
   const current = useRef<{ pz: DocumentPanZoom; key: string } | null>(null)
@@ -28,10 +29,10 @@ export function useDocumentPanZoom(
     const container = ref.current
     if (!container || !html) return
     let stale = false
+    const key = pathKeyRef.current
 
     const attach = (): void => {
       if (stale) return
-      const key = pathKeyRef.current
       const prior = saved.current
       current.current = {
         pz: attachDocumentPanZoom(container, prior && prior.key === key ? prior.states : null),
