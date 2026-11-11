@@ -260,5 +260,7 @@ app.on('will-quit', (event) => {
   if (disposedForQuit) return
   event.preventDefault()
   disposedForQuit = true
-  void disposeIpc().finally(() => app.quit())
+  void disposeIpc()
+    .catch(() => {})
+    .finally(() => app.quit())
 })

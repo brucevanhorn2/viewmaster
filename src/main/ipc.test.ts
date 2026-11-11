@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'fs'
 import { realpath } from 'fs/promises'
 import { tmpdir } from 'os'
 import { basename, join } from 'path'
@@ -103,7 +103,7 @@ vi.mock('./lsp/manager', () => ({
   })
 }))
 
-const { isStaleGeneration, openRepo, registerIpc } = await import('./ipc')
+const { disposeIpc, isStaleGeneration, openRepo, registerIpc } = await import('./ipc')
 
 const noopGetWindow = (): null => null
 registerIpc(noopGetWindow)
@@ -287,6 +287,8 @@ describe('LSP wiring', () => {
     const lower = goQ().absPath.replace(/^[A-Z]:/, (d) => d.toLowerCase())
     const res = await invoke<SymbolLocationsResult>('symbol:definitions', { ...goQ(), absPath: lower })
     expect(res.source).toBe('lsp')
+    // canonical form: the root as opened (realpath'd here) joined with the relative path
+    expect(managers[0].query.mock.calls[0][1].absPath).toBe(join(ws, 'main.go'))
   })
 
   it('an empty LSP answer is the answer', async () => {
@@ -340,11 +342,62 @@ describe('LSP wiring', () => {
     const pending = invoke<SymbolLocationsResult>('symbol:definitions', goQ())
     await vi.waitFor(() => expect(managers[0].query).toHaveBeenCalled())
     const other = await mkdir('vm-ipc-other-')
+    // The new folder also has a Foo: the old word must not be run through it.
+    writeFileSync(join(other, 'b.go'), 'package b\n\nfunc Foo() {}\n')
     await openRepo(noopGetWindow, other)
     release({ kind: 'answer', locations: [{ path: 'main.go', absPath: join(ws, 'main.go'), line: 3, column: 5 }] })
-    const res = await pending
-    expect(res.source).not.toBe('lsp')
-    expect(res.locations.some((l) => l.absPath.startsWith(ws))).toBe(false)
+    expect(await pending).toEqual({ locations: [], truncated: false })
+  })
+
+  it('a folder switch does not wait for LSP shutdown, but disposeIpc does', async () => {
+    let release!: () => void
+    const hung = new Promise<void>((r) => (release = r))
+    managers[0].dispose.mockImplementation(() => hung)
+    const other = await mkdir('vm-ipc-other-')
+    const switched = await Promise.race([
+      openRepo(noopGetWindow, other).then(() => 'switched'),
+      new Promise((r) => setTimeout(() => r('blocked'), 2000))
+    ])
+    expect(switched).toBe('switched')
+    expect(managers[0].dispose).toHaveBeenCalledTimes(1)
+
+    let quitDone = false
+    const quitting = disposeIpc().then(() => (quitDone = true))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(quitDone).toBe(false) // still waiting on the hung manager
+    release()
+    await quitting
+    expect(quitDone).toBe(true)
+    expect(managers[1].dispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('maps the document onto the root as opened when the root is a junction or symlink', async () => {
+    const target = await mkdir('vm-ipc-target-')
+    writeFileSync(join(target, 'main.go'), 'package main\n\nfunc Foo() {}\n')
+    const link = join(tmpdir(), `vm-ipc-link-${process.pid}-${Date.now()}`)
+    try {
+      symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir')
+    } catch {
+      console.warn('skipping: cannot create a directory link here')
+      return
+    }
+    try {
+      const state = await openRepo(noopGetWindow, link)
+      expect(state.root).toBe(link)
+      lspBehavior.query = async () => ({ kind: 'answer', locations: [] })
+      const res = await invoke<SymbolLocationsResult>('symbol:definitions', {
+        word: 'Foo',
+        absPath: join(link, 'main.go'),
+        line: 3,
+        column: 5
+      })
+      expect(res.source).toBe('lsp')
+      const m = managers[managers.length - 1]
+      expect(m.query.mock.calls[0][1].absPath).toBe(join(link, 'main.go'))
+    } finally {
+      await openRepo(noopGetWindow, missingRoot)
+      unlinkSync(link)
+    }
   })
 
   it('symbol and externalKind handlers are graceful with no session', async () => {

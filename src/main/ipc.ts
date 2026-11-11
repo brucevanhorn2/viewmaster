@@ -1,5 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import type { FSWatcher } from 'fs'
+import { realpath } from 'fs/promises'
+import { join, relative } from 'path'
 import type {
   BaselineKind,
   ExternalKind,
@@ -59,6 +61,8 @@ let currentDefinitionsController: AbortController | null = null
 let currentReferencesController: AbortController | null = null
 let currentImportedByController: AbortController | null = null
 let currentRelatedReferencesController: AbortController | null = null
+// Language-server shutdowns started by closeSession() and not yet finished.
+const pendingLspDisposals = new Set<Promise<void>>()
 
 /**
  * Returns the session's cached file listing, populating it if this is the
@@ -95,12 +99,18 @@ async function closeSession(): Promise<void> {
     // Detach first and dispose the manager before any await, so an LSP query
     // still in flight sees its session is no longer current (and resolves
     // to a fallback) instead of a half-closed session that still looks live.
+    // The shutdown itself is not awaited here (a server mid-load can take
+    // seconds to exit); disposeIpc() awaits every pending one at quit.
     const closing = session
     session = null
     const lspDisposed = closing.lsp.dispose().catch(() => {})
-    await closing.watcher.close()
-    if (closing.recorder) await closing.recorder.close()
-    await lspDisposed
+    pendingLspDisposals.add(lspDisposed)
+    void lspDisposed.finally(() => pendingLspDisposals.delete(lspDisposed))
+    try {
+      await closing.watcher.close()
+    } finally {
+      if (closing.recorder) await closing.recorder.close()
+    }
   }
 }
 
@@ -520,6 +530,27 @@ function isSymbolQuery(q: unknown): q is SymbolQuery {
 }
 
 /**
+ * The path to hand the language server for a renderer-supplied document, or
+ * null when it is neither in-root nor under a main-computed external root
+ * (only files the user can open reach the server). An in-root file is
+ * expressed under the root *as opened* -- the same root the server's rootUri
+ * and the location translation use -- so a root reached through a junction,
+ * symlink, subst/mapped drive or a lowercase drive still matches. External
+ * files keep their realpath, which is what the allow-list roots hold.
+ */
+async function serverDocumentPath(absPath: string, s: Session): Promise<string | null> {
+  const inRoot = await resolveWithinRoot(absPath, s.root)
+  if (inRoot) {
+    try {
+      return join(s.root, relative(await realpath(s.root), inRoot))
+    } catch {
+      return null
+    }
+  }
+  return (await resolveExternal(absPath, s.lsp.externalRoots()))?.real ?? null
+}
+
+/**
  * Go/Python ask the session's language server first; a real answer (even an
  * empty one) replaces the heuristic. Any fallback runs the word heuristic and
  * labels it approximate. Other languages are heuristic-only, unlabelled.
@@ -533,25 +564,13 @@ async function lspFirst(
 ): Promise<SymbolLocationsResult> {
   const language = languageForPath(q.absPath)
   if (!language) return { ...(await heuristic(activeSession, q.word, signal)), source: 'heuristic' }
-  // Only files the user can actually open go to the server: in-root, or under
-  // a main-computed external root. realpath also normalizes a lowercase drive.
-  const real =
-    (await resolveWithinRoot(q.absPath, activeSession.root)) ??
-    (await resolveExternal(q.absPath, activeSession.lsp.externalRoots()))?.real
-  const answer = real
-    ? await activeSession.lsp.query(kind, { ...q, absPath: real })
+  const docPath = await serverDocumentPath(q.absPath, activeSession)
+  const answer = docPath
+    ? await activeSession.lsp.query(kind, { ...q, absPath: docPath })
     : ({ kind: 'fallback', reason: 'unavailable' } as const)
   // The folder may have switched while the server worked: never hand the old
-  // session's locations to the new one.
-  const current = session
-  if (current !== activeSession) {
-    if (!current) return { locations: [], truncated: false }
-    return {
-      ...(await heuristic(current, q.word, signal)),
-      source: 'heuristic',
-      approximate: { language, reason: 'unavailable' }
-    }
-  }
+  // session's locations (or the old word's matches) to the new one.
+  if (session !== activeSession) return { locations: [], truncated: false }
   if (answer.kind === 'answer') return { locations: answer.locations, truncated: false, source: 'lsp' }
   return {
     ...(await heuristic(activeSession, q.word, signal)),
@@ -618,5 +637,11 @@ async function heuristicReferences(
 }
 
 export async function disposeIpc(): Promise<void> {
-  await closeSession()
+  try {
+    await closeSession()
+  } finally {
+    // No orphaned language servers: wait for every shutdown, including ones
+    // started by earlier folder switches.
+    await Promise.all([...pendingLspDisposals])
+  }
 }

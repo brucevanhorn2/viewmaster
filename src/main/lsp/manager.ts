@@ -145,9 +145,11 @@ export class LspManager {
       // Stored synchronously so concurrent first queries share one spawn.
       const p = this.spawn(lang, slot)
       slot.acquiring = p
-      void p.finally(() => {
-        if (slot.acquiring === p) slot.acquiring = null
-      })
+      void p
+        .finally(() => {
+          if (slot.acquiring === p) slot.acquiring = null
+        })
+        .catch(() => {}) // the query that awaits `p` handles its rejection
     }
     return slot.acquiring
   }

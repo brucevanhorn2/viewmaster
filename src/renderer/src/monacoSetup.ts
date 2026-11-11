@@ -1,6 +1,7 @@
 import * as monaco from 'monaco-editor'
 import { loader } from '@monaco-editor/react'
 import type { SymbolLocation, SymbolQuery } from '@shared/types'
+import { absPathOfModelUri } from './code/monacoPath'
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
@@ -90,7 +91,7 @@ function wordUnderCursor(
 
 /** Monaco positions are 1-based; SymbolQuery columns are 0-based. */
 function symbolQuery(model: monaco.editor.ITextModel, position: monaco.Position, word: string): SymbolQuery {
-  return { word, absPath: model.uri.fsPath, line: position.lineNumber, column: position.column - 1 }
+  return { word, absPath: absPathOfModelUri(model.uri), line: position.lineNumber, column: position.column - 1 }
 }
 
 // TypeScript/JavaScript already get real, type-aware definition/reference

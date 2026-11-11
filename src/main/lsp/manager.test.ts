@@ -144,6 +144,19 @@ describe('LspManager', () => {
     expect(createClient).toHaveBeenCalledTimes(1)
   })
 
+  it('a createClient that throws is unavailable, with no unhandled rejection', async () => {
+    const m = new LspManager(root, {
+      commandFor: async () => goCmd,
+      createClient: () => {
+        throw new Error('spawn blew up')
+      },
+      externalRootsFor: async () => []
+    })
+    managers.push(m)
+    expect(await m.query('definition', goQ)).toEqual({ kind: 'fallback', reason: 'unavailable' })
+    await new Promise((r) => setTimeout(r, 20)) // let any stray rejection surface
+  })
+
   it('a start failure is unavailable', async () => {
     const { m } = setup({ configure: (c) => (c.startResult = new Error('spawn ENOENT')) })
     expect(await m.query('definition', goQ)).toEqual({ kind: 'fallback', reason: 'unavailable' })
