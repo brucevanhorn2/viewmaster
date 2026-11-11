@@ -29,6 +29,13 @@ export class LspTimeoutError extends Error {
 
 const STDERR_KEEP = 4096
 const KILL_AFTER_MS = 2000
+/** A server that has not finished `initialize` by then is treated as dead. */
+export const START_TIMEOUT_MS = 60_000
+
+export interface LspClientOptions {
+  /** Overrides START_TIMEOUT_MS (tests). */
+  startTimeoutMs?: number
+}
 
 interface OpenDoc {
   version: number
@@ -45,13 +52,20 @@ export class LspClient {
   private dead = false
   private deadWaiters = new Set<(e: Error) => void>()
   private open = new Map<string, OpenDoc>()
+  /** Per-uri didOpen/didClose in progress, so concurrent queries never double-open. */
+  private opening = new Map<string, Promise<void>>()
   private disposed = false
   private startPromise: Promise<void> | null = null
 
+  private readonly startTimeoutMs: number
+
   constructor(
     private readonly cmd: ServerCommand,
-    private readonly workspaceRoot: string
-  ) {}
+    private readonly workspaceRoot: string,
+    opts: LspClientOptions = {}
+  ) {
+    this.startTimeoutMs = opts.startTimeoutMs ?? START_TIMEOUT_MS
+  }
 
   state(): ClientState {
     return this._state
@@ -61,6 +75,7 @@ export class LspClient {
     return this.child?.pid
   }
 
+  /** Fires when the server dies on its own — never for an exit caused by dispose(). */
   onExit(cb: () => void): void {
     this.exitCbs.push(cb)
   }
@@ -81,6 +96,7 @@ export class LspClient {
     } catch {
       /* ignore */
     }
+    if (this.disposed) return
     for (const cb of this.exitCbs) {
       try {
         cb()
@@ -128,9 +144,18 @@ export class LspClient {
       child.stdin?.on('error', () => {})
       child.stdout?.on('error', () => {})
 
+      // Reject only once the child is gone, so a rejected start always means 'dead';
+      // the kill's own exit error must not mask the timeout.
+      let timedOut: LspTimeoutError | null = null
+      const startTimer = setTimeout(() => {
+        timedOut = new LspTimeoutError(`LSP server did not initialize within ${this.startTimeoutMs}ms`)
+        const err = timedOut
+        void this.dispose().finally(() => reject(err))
+      }, this.startTimeoutMs)
       const fail = (err: Error): void => {
+        clearTimeout(startTimer)
         this.markDead(err)
-        reject(err) // no-op if start already settled
+        if (!timedOut) reject(err) // no-op if start already settled
       }
       child.on('error', (err) => fail(err))
       child.on('exit', (code, signal) => {
@@ -182,6 +207,7 @@ export class LspClient {
         .then(async () => {
           await conn.sendNotification('initialized', {})
           if (this.dead) return
+          clearTimeout(startTimer)
           this._state = 'ready'
           resolve()
         })
@@ -191,23 +217,37 @@ export class LspClient {
 
   private async ensureOpen(absPath: string): Promise<string> {
     const uri = toFileUri(absPath)
+    // Wait out any open/reopen already in flight for this uri, then re-check.
+    for (let inflight = this.opening.get(uri); inflight; inflight = this.opening.get(uri)) {
+      await inflight.catch(() => {})
+    }
+    // No await between here and opening.set, so the check-and-claim is atomic.
     const mtimeMs = statSync(absPath).mtimeMs
     const existing = this.open.get(uri)
     if (existing && existing.mtimeMs === mtimeMs) return uri
     const conn = this.conn!
-    if (existing) {
-      await conn.sendNotification('textDocument/didClose', { textDocument: { uri } })
-    }
-    const version = (existing?.version ?? 0) + 1
-    await conn.sendNotification('textDocument/didOpen', {
-      textDocument: {
-        uri,
-        languageId: languageForPath(absPath) ?? 'plaintext',
-        version,
-        text: readFileSync(absPath, 'utf8')
+    const p = (async (): Promise<void> => {
+      if (existing) {
+        this.open.delete(uri)
+        await conn.sendNotification('textDocument/didClose', { textDocument: { uri } })
       }
-    })
-    this.open.set(uri, { version, mtimeMs })
+      const version = (existing?.version ?? 0) + 1
+      await conn.sendNotification('textDocument/didOpen', {
+        textDocument: {
+          uri,
+          languageId: languageForPath(absPath) ?? 'plaintext',
+          version,
+          text: readFileSync(absPath, 'utf8')
+        }
+      })
+      this.open.set(uri, { version, mtimeMs })
+    })()
+    this.opening.set(uri, p)
+    try {
+      await p
+    } finally {
+      if (this.opening.get(uri) === p) this.opening.delete(uri)
+    }
     return uri
   }
 

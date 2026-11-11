@@ -1,5 +1,5 @@
 // Test-only LSP server. Behaviour of textDocument/definition is set by FAKE_MODE:
-// ok | empty | hang | crash. Not collected by vitest (only *.test.ts) nor typechecked.
+// ok | empty | hang | crash | init-hang (never answers initialize). Not collected by vitest (only *.test.ts) nor typechecked.
 import {
   createProtocolConnection,
   StreamMessageReader,
@@ -13,7 +13,11 @@ const conn = createProtocolConnection(
   new StreamMessageWriter(process.stdout)
 )
 
-conn.onRequest('initialize', () => ({ capabilities: { definitionProvider: true, referencesProvider: true } }))
+conn.onRequest('initialize', () =>
+  mode === 'init-hang'
+    ? new Promise(() => {})
+    : { capabilities: { definitionProvider: true, referencesProvider: true } }
+)
 conn.onNotification('initialized', () => {})
 conn.onRequest('shutdown', () => null)
 conn.onNotification('exit', () => process.exit(0))

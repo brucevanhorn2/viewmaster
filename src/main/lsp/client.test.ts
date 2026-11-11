@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import { mkdtempSync, writeFileSync, rmSync, utimesSync, realpathSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
-import { LspClient, LspTimeoutError, type ServerCommand } from './client'
+import { LspClient, LspTimeoutError, START_TIMEOUT_MS, type ServerCommand } from './client'
 
 const fakeServerPath = resolve(__dirname, 'fixtures', 'fakeServer.mjs')
 
@@ -124,6 +124,61 @@ describe('LspClient', () => {
     expect(await waitDead(pid)).toBe(true)
     expect(c.state()).toBe('dead')
     await c.dispose() // idempotent
+  })
+
+  it('does not fire onExit when the exit was caused by dispose', async () => {
+    const c = make('ok')
+    await c.start()
+    const pid = c.pid()!
+    let fired = 0
+    c.onExit(() => fired++)
+    await c.dispose()
+    expect(await waitDead(pid)).toBe(true)
+    await new Promise((r) => setTimeout(r, 100))
+    expect(fired).toBe(0)
+  })
+
+  it('start rejects with LspTimeoutError and disposes when initialize hangs', async () => {
+    const c = new LspClient(cmd('init-hang'), root, { startTimeoutMs: 300 })
+    clients.push(c)
+    let fired = 0
+    c.onExit(() => fired++)
+    const err = await c.start().then(
+      () => null,
+      (e) => e
+    )
+    expect(err).toBeInstanceOf(LspTimeoutError)
+    const pid = c.pid()!
+    expect(await waitDead(pid)).toBe(true)
+    expect(c.state()).toBe('dead')
+    expect(fired).toBe(0)
+  })
+
+  it('has a generous default start deadline', () => {
+    expect(START_TIMEOUT_MS).toBeGreaterThanOrEqual(60_000)
+  })
+
+  it('sends a single didOpen for concurrent first queries on the same file', async () => {
+    const c = make('ok')
+    await c.start()
+    await Promise.all([
+      c.definition(file, 1, 0, 5000),
+      c.references(file, 1, 0, 5000),
+      c.definition(file, 1, 0, 5000)
+    ])
+    const events = await queryOpened(c)
+    expect(events.map((e: { kind: string }) => e.kind)).toEqual(['didOpen'])
+  })
+
+  it('reopens once for concurrent queries after the file changed', async () => {
+    const c = make('ok')
+    await c.start()
+    await c.definition(file, 1, 0, 5000)
+    const future = new Date(Date.now() + 5000)
+    utimesSync(file, future, future)
+    await Promise.all([c.definition(file, 1, 0, 5000), c.references(file, 1, 0, 5000)])
+    const events = await queryOpened(c)
+    expect(events.map((e: { kind: string }) => e.kind)).toEqual(['didOpen', 'didClose', 'didOpen'])
   })
 
   it('dispose before start and dispose twice are safe', async () => {
