@@ -124,3 +124,40 @@ describe('attachDocumentPanZoom', () => {
     expect(container.innerHTML).toBe('<p>new</p>')
   })
 })
+
+describe('late-loading and mermaid-internal images', () => {
+  it('wraps an image once it finishes loading; count change falls back to Fit', () => {
+    const late = document.createElement('img')
+    loaded(late, 400, 300, false)
+    container.append(mermaidNode(), late)
+    const d = attachDocumentPanZoom(container, [{ zoom: 2, x: 0, y: 0 }])
+    expect(late.parentElement).toBe(container)
+    loaded(late, 400, 300, true)
+    late.dispatchEvent(new Event('load'))
+    expect(late.parentElement?.classList.contains('pz-doc')).toBe(true)
+    expect(d.states().map((s) => s.zoom)).toEqual([1, 1])
+    d.destroy()
+    expect(late.parentElement).toBe(container)
+  })
+
+  it('destroy removes pending load listeners', () => {
+    const late = document.createElement('img')
+    loaded(late, 400, 300, false)
+    container.append(late)
+    const d = attachDocumentPanZoom(container, null)
+    d.destroy()
+    loaded(late, 400, 300, true)
+    late.dispatchEvent(new Event('load'))
+    expect(late.parentElement).toBe(container)
+  })
+
+  it('does not wrap images inside mermaid output', () => {
+    const pre = mermaidNode()
+    const img = document.createElement('img')
+    loaded(img, 400, 300)
+    pre.appendChild(img)
+    container.append(pre)
+    attachDocumentPanZoom(container, null)
+    expect(img.closest('.pz-doc')).toBeNull()
+  })
+})

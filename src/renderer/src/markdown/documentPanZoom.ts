@@ -16,16 +16,28 @@ interface Entry {
   last: PanZoomState
 }
 
-function findZoomables(container: HTMLElement): Element[] {
+const isLoaded = (el: HTMLImageElement): boolean => el.complete && el.naturalWidth > 0
+
+function candidates(container: HTMLElement): Element[] {
   const sel = 'pre.mermaid[data-processed]:not(.mermaid-error) > svg, img'
-  return Array.from(container.querySelectorAll(sel)).filter((el) => {
+  // Images inside mermaid output (foreignObject labels) belong to the diagram.
+  return Array.from(container.querySelectorAll(sel)).filter(
+    (el) => el instanceof SVGElement || !el.closest('pre.mermaid')
+  )
+}
+
+function findZoomables(container: HTMLElement): Element[] {
+  return candidates(container).filter((el) => {
     if (!(el instanceof HTMLImageElement)) return true
-    return (
-      el.complete &&
-      el.naturalWidth > 0 &&
-      (el.naturalWidth >= MIN_ZOOMABLE_PX || el.naturalHeight >= MIN_ZOOMABLE_PX)
-    )
+    return isLoaded(el) && (el.naturalWidth >= MIN_ZOOMABLE_PX || el.naturalHeight >= MIN_ZOOMABLE_PX)
   })
+}
+
+/** Images skipped only because they have not loaded yet; they may qualify once they do. */
+function findPending(container: HTMLElement): HTMLImageElement[] {
+  return candidates(container).filter(
+    (el): el is HTMLImageElement => el instanceof HTMLImageElement && !isLoaded(el)
+  )
 }
 
 /**
@@ -33,10 +45,7 @@ function findZoomables(container: HTMLElement): Element[] {
  * element's natural rendered size. `saved` is applied by index only if its length matches the
  * number of zoomables found; otherwise everything starts at Fit.
  */
-export function attachDocumentPanZoom(
-  container: HTMLElement,
-  saved: PanZoomState[] | null
-): DocumentPanZoom {
+function wrapAll(container: HTMLElement, saved: PanZoomState[] | null): DocumentPanZoom {
   const found = findZoomables(container)
   // Measure everything first, before any wrapping shifts the layout.
   const measured = found
@@ -86,6 +95,46 @@ export function attachDocumentPanZoom(
         if (container.contains(e.wrapper)) e.wrapper.replaceWith(e.el)
       }
       entries.length = 0
+    }
+  }
+}
+
+/**
+ * Public entry. Wraps what qualifies now; images still loading get a one-time `load` listener
+ * that re-runs the pass (carrying over current states; the count-equality rule applies).
+ */
+export function attachDocumentPanZoom(
+  container: HTMLElement,
+  saved: PanZoomState[] | null
+): DocumentPanZoom {
+  let destroyed = false
+  let inner: DocumentPanZoom
+  let pending: HTMLImageElement[] = []
+
+  const clearPending = (): void => {
+    for (const img of pending) img.removeEventListener('load', onLate)
+    pending = []
+  }
+  const build = (states: PanZoomState[] | null): void => {
+    inner = wrapAll(container, states)
+    pending = findPending(container)
+    for (const img of pending) img.addEventListener('load', onLate, { once: true })
+  }
+  function onLate(): void {
+    if (destroyed) return
+    const states = inner.states()
+    clearPending()
+    inner.destroy()
+    build(states)
+  }
+
+  build(saved)
+  return {
+    states: () => inner.states(),
+    destroy() {
+      destroyed = true
+      clearPending()
+      inner.destroy()
     }
   }
 }
