@@ -30,6 +30,7 @@ class FakeClient {
     this.st = 'dead'
   })
   onExit = vi.fn()
+  notifyFilesChanged = vi.fn(async (_paths: string[]) => {})
   state(): ClientState {
     return this.st
   }
@@ -256,5 +257,36 @@ describe('LspManager', () => {
       reason: 'unavailable'
     })
     expect(createClient).not.toHaveBeenCalled()
+  })
+
+  it('notifyFilesChanged forwards to running clients only, and never spawns', async () => {
+    const { m, clients, createClient } = setup()
+    const changed = [join(root, 'a.go'), join(root, 'go.mod')]
+    m.notifyFilesChanged(changed) // nothing running yet
+    expect(createClient).not.toHaveBeenCalled()
+
+    await m.query('definition', goQ) // go is running
+    m.notifyFilesChanged(changed)
+    expect(clients[0].notifyFilesChanged).toHaveBeenCalledTimes(1)
+    expect(clients[0].notifyFilesChanged).toHaveBeenCalledWith(changed)
+    expect(createClient).toHaveBeenCalledTimes(1) // python was not started for it
+
+    clients[0].st = 'dead'
+    m.notifyFilesChanged(changed)
+    expect(clients[0].notifyFilesChanged).toHaveBeenCalledTimes(1)
+  })
+
+  it('notifyFilesChanged swallows client errors and is a no-op once disposed', async () => {
+    const { m, clients } = setup()
+    await m.query('definition', goQ)
+    clients[0].notifyFilesChanged.mockImplementation(() => {
+      throw new Error('boom')
+    })
+    expect(() => m.notifyFilesChanged([join(root, 'a.go')])).not.toThrow()
+    clients[0].notifyFilesChanged.mockImplementation(async () => {})
+    await m.dispose()
+    clients[0].st = 'ready'
+    m.notifyFilesChanged([join(root, 'a.go')])
+    expect(clients[0].notifyFilesChanged).toHaveBeenCalledTimes(1)
   })
 })

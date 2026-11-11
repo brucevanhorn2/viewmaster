@@ -33,6 +33,8 @@ import { createLspManager, type LspManager } from './lsp/manager'
 import { languageForPath } from './lsp/translate'
 
 const RECOMPUTE_DEBOUNCE_MS = 300
+// Changed files are forwarded to running language servers in batches.
+const LSP_NOTIFY_BATCH_MS = 200
 
 interface Session {
   root: string
@@ -52,7 +54,7 @@ interface Session {
   customBaselineRef: string | null
   // Go/Python language servers for this folder (issue #22). Starts nothing
   // until the first query; disposed with the session.
-  lsp: Pick<LspManager, 'query' | 'externalRoots' | 'dispose'>
+  lsp: Pick<LspManager, 'query' | 'externalRoots' | 'dispose' | 'notifyFilesChanged'>
 }
 
 let session: Session | null = null
@@ -213,8 +215,23 @@ export async function openRepo(getWindow: WindowGetter, root: string): Promise<R
           })
         : null
     let recomputeTimer: NodeJS.Timeout | null = null
+    // The session this watcher belongs to; set once this call wins the race.
+    let owner: Session | null = null
+    const lspChanged = new Set<string>()
+    let lspTimer: NodeJS.Timeout | null = null
     const watcher = watchRepo(watchRoot, (relPath) => {
       recorder?.handleEvent(relPath)
+      // Tell running language servers what changed on disk (a pull, codegen),
+      // so answers that read other files are not computed from stale content.
+      if (relPath && relPath !== '.git' && !relPath.startsWith('.git/')) {
+        lspChanged.add(join(watchRoot, relPath))
+        lspTimer ??= setTimeout(() => {
+          lspTimer = null
+          const paths = [...lspChanged]
+          lspChanged.clear()
+          if (owner && session === owner) owner.lsp.notifyFilesChanged(paths)
+        }, LSP_NOTIFY_BATCH_MS)
+      }
       if (recomputeTimer) clearTimeout(recomputeTimer)
       recomputeTimer = setTimeout(async () => {
         const currentMode = session?.mode ?? 'changed'
@@ -252,6 +269,7 @@ export async function openRepo(getWindow: WindowGetter, root: string): Promise<R
         // Created only for the winning call; it spawns nothing until queried.
         lsp: createLspManager(state.root)
       }
+      owner = session
     }
   }
 

@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'child_process'
-import { statSync, readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import {
   createProtocolConnection,
   StreamMessageReader,
@@ -29,6 +29,8 @@ export class LspTimeoutError extends Error {
 
 const STDERR_KEEP = 4096
 const KILL_AFTER_MS = 2000
+/** After SIGKILL, how long dispose waits for the exit before giving up. */
+const FORCE_EXIT_WAIT_MS = 1000
 /** A server that has not finished `initialize` by then is treated as dead. */
 export const START_TIMEOUT_MS = 60_000
 
@@ -37,9 +39,26 @@ export interface LspClientOptions {
   startTimeoutMs?: number
 }
 
+/**
+ * A document open in the server for the duration of the queries using it.
+ * The viewer is read-only and keeps nothing open between queries: the last
+ * query to finish sends didClose, so the next one always opens current disk
+ * content.
+ */
 interface OpenDoc {
-  version: number
-  mtimeMs: number
+  refs: number
+  /** Settles once didOpen has been sent. */
+  ready: Promise<void>
+}
+
+/** LSP FileChangeType. */
+const FILE_CHANGED = 2
+const FILE_DELETED = 3
+
+function sleep(ms: number): { p: Promise<void>; cancel: () => void } {
+  let t: NodeJS.Timeout | undefined
+  const p = new Promise<void>((r) => (t = setTimeout(r, ms)))
+  return { p, cancel: () => clearTimeout(t) }
 }
 
 export class LspClient {
@@ -51,9 +70,11 @@ export class LspClient {
   private exitCbs: Array<() => void> = []
   private dead = false
   private deadWaiters = new Set<(e: Error) => void>()
-  private open = new Map<string, OpenDoc>()
-  /** Per-uri didOpen/didClose in progress, so concurrent queries never double-open. */
-  private opening = new Map<string, Promise<void>>()
+  /** Documents currently open, refcounted by in-flight queries. */
+  private docs = new Map<string, OpenDoc>()
+  /** Per-uri didClose in flight; a new open waits it out. */
+  private closing = new Map<string, Promise<void>>()
+  private nextVersion = 1
   private disposed = false
   private startPromise: Promise<void> | null = null
 
@@ -194,7 +215,11 @@ export class LspClient {
           workspaceFolders: [{ uri: rootUri, name: 'workspace' }],
           initializationOptions: this.cmd.initializationOptions,
           capabilities: {
-            workspace: { configuration: true, workspaceFolders: true },
+            workspace: {
+              configuration: true,
+              workspaceFolders: true,
+              didChangeWatchedFiles: { dynamicRegistration: false }
+            },
             window: { workDoneProgress: true },
             textDocument: {
               synchronization: { dynamicRegistration: false },
@@ -215,40 +240,89 @@ export class LspClient {
     })
   }
 
-  private async ensureOpen(absPath: string): Promise<string> {
+  /**
+   * Opens `absPath` for one query (or joins a query that already has it open)
+   * and returns the handle to release with releaseDoc. A query that joins an
+   * in-flight open shares that content.
+   */
+  private async acquireDoc(absPath: string): Promise<{ uri: string; doc: OpenDoc }> {
     const uri = toFileUri(absPath)
-    // Wait out any open/reopen already in flight for this uri, then re-check.
-    for (let inflight = this.opening.get(uri); inflight; inflight = this.opening.get(uri)) {
-      await inflight.catch(() => {})
-    }
-    // No await between here and opening.set, so the check-and-claim is atomic.
-    const mtimeMs = statSync(absPath).mtimeMs
-    const existing = this.open.get(uri)
-    if (existing && existing.mtimeMs === mtimeMs) return uri
-    const conn = this.conn!
-    const p = (async (): Promise<void> => {
-      if (existing) {
-        this.open.delete(uri)
-        await conn.sendNotification('textDocument/didClose', { textDocument: { uri } })
+    // Wait out any didClose in flight for this uri, then re-check.
+    for (let c = this.closing.get(uri); c; c = this.closing.get(uri)) await c
+    // No await between here and docs.set, so the check-and-claim is atomic.
+    const existing = this.docs.get(uri)
+    if (existing) {
+      existing.refs++
+      try {
+        await existing.ready
+      } catch (e) {
+        void this.releaseDoc(uri, existing)
+        throw e
       }
-      const version = (existing?.version ?? 0) + 1
-      await conn.sendNotification('textDocument/didOpen', {
+      return { uri, doc: existing }
+    }
+    const text = readFileSync(absPath, 'utf8') // throws before anything is claimed
+    const conn = this.conn!
+    const doc: OpenDoc = { refs: 1, ready: Promise.resolve() }
+    doc.ready = this.raceDead(
+      conn.sendNotification('textDocument/didOpen', {
         textDocument: {
           uri,
           languageId: languageForPath(absPath) ?? 'plaintext',
-          version,
-          text: readFileSync(absPath, 'utf8')
+          version: this.nextVersion++,
+          text
         }
       })
-      this.open.set(uri, { version, mtimeMs })
-    })()
-    this.opening.set(uri, p)
+    )
+    doc.ready.catch(() => {})
+    this.docs.set(uri, doc)
     try {
-      await p
-    } finally {
-      if (this.opening.get(uri) === p) this.opening.delete(uri)
+      await doc.ready
+    } catch (e) {
+      // Never opened: drop it so no didClose is sent for it.
+      if (this.docs.get(uri) === doc) this.docs.delete(uri)
+      void this.releaseDoc(uri, doc)
+      throw e
     }
-    return uri
+    return { uri, doc }
+  }
+
+  /** The last release of a document sends didClose. Never throws. */
+  private releaseDoc(uri: string, doc: OpenDoc): Promise<void> {
+    doc.refs--
+    if (doc.refs > 0 || this.docs.get(uri) !== doc) return Promise.resolve()
+    this.docs.delete(uri)
+    let sent: Promise<void>
+    try {
+      sent = this.conn
+        ? this.raceDead(this.conn.sendNotification('textDocument/didClose', { textDocument: { uri } }))
+        : Promise.resolve()
+    } catch {
+      sent = Promise.resolve()
+    }
+    const p = sent.catch(() => {})
+    this.closing.set(uri, p)
+    void p.finally(() => {
+      if (this.closing.get(uri) === p) this.closing.delete(uri)
+    })
+    return p
+  }
+
+  /**
+   * Tells the server files changed on disk (workspace/didChangeWatchedFiles):
+   * Changed if the path exists, else Deleted. No-op unless ready; never throws.
+   */
+  async notifyFilesChanged(absPaths: string[]): Promise<void> {
+    if (this._state !== 'ready' || !this.conn || absPaths.length === 0) return
+    const changes = absPaths.map((p) => ({
+      uri: toFileUri(p),
+      type: existsSync(p) ? FILE_CHANGED : FILE_DELETED
+    }))
+    try {
+      await this.raceDead(this.conn.sendNotification('workspace/didChangeWatchedFiles', { changes }))
+    } catch {
+      /* server gone; nothing to tell */
+    }
   }
 
   private async query(
@@ -259,28 +333,31 @@ export class LspClient {
     timeoutMs: number
   ): Promise<SymbolLocation[]> {
     if (this._state !== 'ready' || !this.conn) throw new Error('LSP server is not ready')
-    const uri = await this.ensureOpen(absPath)
+    const conn = this.conn
+    const { uri, doc } = await this.acquireDoc(absPath)
     const cts = new CancellationTokenSource()
     let timer: NodeJS.Timeout | undefined
-    const params: Record<string, unknown> = {
-      textDocument: { uri },
-      position: { line: line - 1, character: column }
-    }
-    if (method === 'textDocument/references') params.context = { includeDeclaration: true }
-    const request = this.conn.sendRequest(method, params, cts.token)
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        cts.cancel()
-        reject(new LspTimeoutError(`${method} timed out after ${timeoutMs}ms`))
-      }, timeoutMs)
-    })
+    let request: Promise<unknown> | undefined
     try {
+      const params: Record<string, unknown> = {
+        textDocument: { uri },
+        position: { line: line - 1, character: column }
+      }
+      if (method === 'textDocument/references') params.context = { includeDeclaration: true }
+      request = conn.sendRequest(method, params, cts.token)
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          cts.cancel()
+          reject(new LspTimeoutError(`${method} timed out after ${timeoutMs}ms`))
+        }, timeoutMs)
+      })
       const result = await Promise.race([this.raceDead(request), timeout])
       return lspLocationsToSymbolLocations(result as never, this.workspaceRoot)
     } finally {
       clearTimeout(timer)
       cts.dispose()
-      request.catch(() => {}) // a cancelled request may reject later; never unhandled
+      request?.catch(() => {}) // a cancelled request may reject later; never unhandled
+      await this.releaseDoc(uri, doc) // success, error or timeout: close what we opened
     }
   }
 
@@ -313,41 +390,44 @@ export class LspClient {
       if (hasExited()) r()
       else child.once('exit', () => r())
     })
-    let killTimer: NodeJS.Timeout | undefined
-    const killP = new Promise<void>((r) => {
-      killTimer = setTimeout(() => {
-        try {
-          child.kill()
-        } catch {
-          /* ignore */
-        }
-        r()
-      }, KILL_AFTER_MS)
-    })
+    const kill = (signal: NodeJS.Signals): void => {
+      try {
+        child.kill(signal)
+      } catch {
+        /* ignore */
+      }
+    }
+    // Graceful phase, bounded by KILL_AFTER_MS: shutdown/exit for a ready
+    // server, SIGTERM otherwise. Then SIGKILL and wait at most
+    // FORCE_EXIT_WAIT_MS, so dispose always settles.
+    const grace = sleep(KILL_AFTER_MS)
+    let force: ReturnType<typeof sleep> | undefined
     try {
+      let graceful: Promise<void>
       if (this._state === 'ready' && this.conn) {
         const conn = this.conn
-        await Promise.race([
-          (async () => {
+        graceful = (async () => {
+          try {
             await conn.sendRequest('shutdown')
             await conn.sendNotification('exit')
-          })().catch(() => {}),
-          killP
-        ])
+          } catch {
+            /* fall through to waiting for exit */
+          }
+          await exitedP
+        })()
       } else {
-        child.kill()
+        kill('SIGTERM')
+        graceful = exitedP
       }
-      await Promise.race([exitedP, killP])
+      await Promise.race([graceful, grace.p])
       if (!hasExited()) {
-        try {
-          child.kill()
-        } catch {
-          /* ignore */
-        }
-        await exitedP
+        kill('SIGKILL')
+        force = sleep(FORCE_EXIT_WAIT_MS)
+        await Promise.race([exitedP, force.p])
       }
     } finally {
-      clearTimeout(killTimer)
+      grace.cancel()
+      force?.cancel()
       this.markDead(new Error('LSP client disposed'))
     }
   }

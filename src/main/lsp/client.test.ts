@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import { mkdtempSync, writeFileSync, rmSync, utimesSync, realpathSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
+import { pathToFileURL } from 'url'
 import { LspClient, LspTimeoutError, START_TIMEOUT_MS, type ServerCommand } from './client'
 
 const fakeServerPath = resolve(__dirname, 'fixtures', 'fakeServer.mjs')
@@ -105,15 +106,99 @@ describe('LspClient', () => {
     const c = make('ok')
     await c.start()
     await c.definition(file, 1, 0, 5000)
+    writeFileSync(file, 'package main\nfunc b() {}\n')
     const future = new Date(Date.now() + 5000)
     utimesSync(file, future, future)
     await c.definition(file, 1, 0, 5000)
 
     const events = await queryOpened(c)
-    expect(events.map((e: { kind: string }) => e.kind)).toEqual(['didOpen', 'didClose', 'didOpen'])
+    expect(events.map((e: { kind: string }) => e.kind)).toEqual(['didOpen', 'didClose', 'didOpen', 'didClose'])
     expect(events[0].languageId).toBe('go')
+    expect(events[0].text).toBe('package main\nfunc a() {}\n')
+    expect(events[2].text).toBe('package main\nfunc b() {}\n')
     expect(events[2].version).toBeGreaterThan(events[0].version)
   })
+
+  it('closes the document after each query, whether it succeeds or times out', async () => {
+    const ok = make('ok')
+    await ok.start()
+    await ok.definition(file, 1, 0, 5000)
+    await ok.references(file, 1, 0, 5000)
+    const evOk = await queryOpened(ok)
+    expect(evOk.map((e: { kind: string }) => e.kind)).toEqual(['didOpen', 'didClose', 'didOpen', 'didClose'])
+    expect(evOk[1].uri).toBe(evOk[0].uri)
+
+    const hang = make('hang')
+    await hang.start()
+    await expect(hang.definition(file, 1, 0, 200)).rejects.toBeInstanceOf(LspTimeoutError)
+    const evHang = await queryOpened(hang)
+    expect(evHang.map((e: { kind: string }) => e.kind)).toEqual(['didOpen', 'didClose'])
+  })
+
+  it('a document shared by overlapping queries is closed only after the last one', async () => {
+    const c = new LspClient(
+      { ...cmd('ok'), env: { ...process.env, FAKE_MODE: 'ok', FAKE_DEF_DELAY_MS: '400' } },
+      root
+    )
+    clients.push(c)
+    await c.start()
+    const slow = c.definition(file, 1, 0, 5000)
+    await c.references(file, 1, 0, 5000)
+    const mid = await queryOpened(c)
+    expect(mid.map((e: { kind: string }) => e.kind)).toEqual(['didOpen'])
+    await slow
+    const after = await queryOpened(c)
+    expect(after.map((e: { kind: string }) => e.kind)).toEqual(['didOpen', 'didClose'])
+  })
+
+  it('a missing file rejects without leaving anything open', async () => {
+    const c = make('ok')
+    await c.start()
+    await expect(c.definition(join(root, 'nope.go'), 1, 0, 5000)).rejects.toThrow()
+    await c.definition(file, 1, 0, 5000)
+    const events = await queryOpened(c)
+    expect(events.map((e: { kind: string }) => e.kind)).toEqual(['didOpen', 'didClose'])
+  })
+
+  it('forwards changed files as workspace/didChangeWatchedFiles', async () => {
+    const c = make('ok')
+    await c.start()
+    const gone = join(root, 'gone.go')
+    await c.notifyFilesChanged([file, gone])
+    const events = await queryOpened(c)
+    const changes = events.filter((e: { kind: string }) => e.kind === 'didChangeWatchedFiles')
+    expect(changes).toHaveLength(1)
+    expect(changes[0].changes).toEqual([
+      { uri: pathToFileURL(file).toString(), type: 2 },
+      { uri: pathToFileURL(gone).toString(), type: 3 }
+    ])
+  })
+
+  it('advertises didChangeWatchedFiles without dynamic registration', async () => {
+    const c = make('ok')
+    await c.start()
+    const init = await c.sendCustomRequest('fake/initParams')
+    expect(init.capabilities.workspace.didChangeWatchedFiles).toEqual({ dynamicRegistration: false })
+  })
+
+  it('notifyFilesChanged on a client that is not started is a no-op', async () => {
+    const c = make('ok')
+    await expect(c.notifyFilesChanged([file])).resolves.toBeUndefined()
+  })
+
+  it(
+    'dispose of a server that ignores shutdown, exit and SIGTERM resolves within the bound',
+    async () => {
+      const c = make('nodie')
+      await c.start()
+      const pid = c.pid()!
+      const t0 = Date.now()
+      await c.dispose()
+      expect(Date.now() - t0).toBeLessThan(4500)
+      expect(await waitDead(pid)).toBe(true)
+    },
+    10_000
+  )
 
   it('dispose kills the child', async () => {
     const c = make('ok')
@@ -167,7 +252,7 @@ describe('LspClient', () => {
       c.definition(file, 1, 0, 5000)
     ])
     const events = await queryOpened(c)
-    expect(events.map((e: { kind: string }) => e.kind)).toEqual(['didOpen'])
+    expect(events.map((e: { kind: string }) => e.kind)).toEqual(['didOpen', 'didClose'])
   })
 
   it('reopens once for concurrent queries after the file changed', async () => {
@@ -178,7 +263,7 @@ describe('LspClient', () => {
     utimesSync(file, future, future)
     await Promise.all([c.definition(file, 1, 0, 5000), c.references(file, 1, 0, 5000)])
     const events = await queryOpened(c)
-    expect(events.map((e: { kind: string }) => e.kind)).toEqual(['didOpen', 'didClose', 'didOpen'])
+    expect(events.map((e: { kind: string }) => e.kind)).toEqual(['didOpen', 'didClose', 'didOpen', 'didClose'])
   })
 
   it('dispose before start and dispose twice are safe', async () => {

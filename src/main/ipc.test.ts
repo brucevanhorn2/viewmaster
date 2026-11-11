@@ -47,6 +47,7 @@ vi.mock('electron', () => ({
 interface FakeWatcher {
   root: string
   close: ReturnType<typeof vi.fn>
+  onEvent: (relPath: string | null) => void
 }
 interface FakeRecorder {
   root: string
@@ -58,8 +59,8 @@ const watchers: FakeWatcher[] = []
 const recorders: FakeRecorder[] = []
 
 vi.mock('./watcher', () => ({
-  watchRepo: vi.fn((root: string) => {
-    const w: FakeWatcher = { root, close: vi.fn() }
+  watchRepo: vi.fn((root: string, onEvent: (relPath: string | null) => void) => {
+    const w: FakeWatcher = { root, close: vi.fn(), onEvent }
     watchers.push(w)
     return w
   })
@@ -80,6 +81,7 @@ interface FakeManager {
   query: ReturnType<typeof vi.fn>
   externalRoots: ReturnType<typeof vi.fn>
   dispose: ReturnType<typeof vi.fn>
+  notifyFilesChanged: ReturnType<typeof vi.fn>
 }
 const managers: FakeManager[] = []
 const lspBehavior: {
@@ -96,7 +98,8 @@ vi.mock('./lsp/manager', () => ({
       root,
       query: vi.fn((kind: string, q: SymbolQuery) => lspBehavior.query(kind, q)),
       externalRoots: vi.fn(() => lspBehavior.roots),
-      dispose: vi.fn(async () => {})
+      dispose: vi.fn(async () => {}),
+      notifyFilesChanged: vi.fn()
     }
     managers.push(m)
     return m
@@ -219,7 +222,7 @@ describe('LSP wiring', () => {
   })
   afterEach(async () => {
     await openRepo(noopGetWindow, missingRoot) // closes the session
-    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true })
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
     managers.length = 0
     watchers.length = 0
     recorders.length = 0
@@ -398,6 +401,31 @@ describe('LSP wiring', () => {
       await openRepo(noopGetWindow, missingRoot)
       unlinkSync(link)
     }
+  })
+
+  it('forwards watcher changes to the session language servers as absolute paths, batched', async () => {
+    const w = watchers[watchers.length - 1]
+    expect(w.root).toBe(ws)
+    w.onEvent('main.go')
+    w.onEvent('sub/x.py')
+    w.onEvent('main.go')
+    w.onEvent(null)
+    w.onEvent('.git/index')
+    await vi.waitFor(() => expect(managers[0].notifyFilesChanged).toHaveBeenCalled())
+    await new Promise((r) => setTimeout(r, 50))
+    expect(managers[0].notifyFilesChanged).toHaveBeenCalledTimes(1)
+    expect(managers[0].notifyFilesChanged).toHaveBeenCalledWith([join(ws, 'main.go'), join(ws, 'sub', 'x.py')])
+    // Let the watcher's repo recompute (it runs git in ws) finish before cleanup.
+    await new Promise((r) => setTimeout(r, 800))
+  })
+
+  it('drops watcher changes that arrive after the session closed', async () => {
+    const w = watchers[watchers.length - 1]
+    const m = managers[0]
+    w.onEvent('main.go')
+    await openRepo(noopGetWindow, missingRoot)
+    await new Promise((r) => setTimeout(r, 600))
+    expect(m.notifyFilesChanged).not.toHaveBeenCalled()
   })
 
   it('symbol and externalKind handlers are graceful with no session', async () => {

@@ -82,6 +82,25 @@ export class LspManager {
     })
   }
 
+  /**
+   * Forwards on-disk changes (absolute paths) to every server that is running,
+   * as workspace/didChangeWatchedFiles. Never starts a server; never throws.
+   * Every path goes to every running server, unfiltered by extension, since
+   * go.mod / pyproject.toml changes matter too.
+   */
+  notifyFilesChanged(absPaths: string[]): void {
+    if (this.disposed || absPaths.length === 0) return
+    for (const slot of this.slots.values()) {
+      const i = slot.instance
+      if (!i || i.failed || i.client.state() !== 'ready') continue
+      try {
+        void i.client.notifyFilesChanged(absPaths).catch(() => {})
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   externalRoots(): ExternalRoot[] {
     return [...this.slots.values()].flatMap((s) => s.roots)
   }
