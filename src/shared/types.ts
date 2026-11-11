@@ -76,8 +76,23 @@ export interface SymbolLocation {
   column: number
 }
 
+export type LspLanguage = 'go' | 'python'
+export type ApproximateReason = 'starting' | 'not-installed' | 'unavailable'
+export type ExternalKind = 'go-stdlib' | 'go-modcache' | 'python-venv' | 'python-stubs'
+
+export interface SymbolQuery {
+  word: string
+  absPath: string
+  /** 1-based line number. */
+  line: number
+  /** 0-based character offset within the line. */
+  column: number
+}
+
 export interface SymbolLocationsResult {
   locations: SymbolLocation[]
   truncated: boolean
   error?: string
+  source?: 'lsp' | 'heuristic'
+  approximate?: { language: LspLanguage; reason: ApproximateReason }
 }

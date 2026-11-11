@@ -23,7 +23,7 @@ function mimeFor(absPath: string): string {
 }
 
 /** True when `absPath` is `workspaceRoot` itself or a descendant of it. */
-function isInsideRoot(absPath: string, workspaceRoot: string): boolean {
+export function isInsideRoot(absPath: string, workspaceRoot: string): boolean {
   const rel = relative(workspaceRoot, absPath)
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
 }
