@@ -160,6 +160,89 @@ describe('attachPanZoom', () => {
     expect(content.hasAttribute('style')).toBe(false)
   })
 
+  it('pointerdown is default-prevented (no native drag) except on controls; dragstart is blocked', () => {
+    attach()
+    const down = new MouseEvent('pointerdown', { button: 0, bubbles: true, cancelable: true })
+    content.dispatchEvent(down)
+    expect(down.defaultPrevented).toBe(true)
+    const ds = new Event('dragstart', { bubbles: true, cancelable: true })
+    content.dispatchEvent(ds)
+    expect(ds.defaultPrevented).toBe(true)
+    const cd = new MouseEvent('pointerdown', { button: 0, bubbles: true, cancelable: true })
+    btn('in').dispatchEvent(cd)
+    expect(cd.defaultPrevented).toBe(false)
+  })
+
+  it('pointercancel resets moved so the next control click is not swallowed', () => {
+    const c = attach()
+    c.zoomBy(2)
+    ptr('pointerdown', 500, 400)
+    ptr('pointermove', 450, 380)
+    ptr('pointercancel', 450, 380)
+    expect(viewport.classList.contains('pz-dragging')).toBe(false)
+    const z = c.getState().zoom
+    btn('in').click()
+    expect(c.getState().zoom).toBeGreaterThan(z)
+  })
+
+  it('a pointerdown on the controls resets a stale moved flag', () => {
+    const c = attach()
+    c.zoomBy(2)
+    ptr('pointerdown', 500, 400)
+    ptr('pointermove', 450, 380)
+    ptr('pointerup', 450, 380) // moved stays true until a click
+    ptr('pointerdown', 0, 0, btn('in'))
+    const z = c.getState().zoom
+    btn('in').click()
+    expect(c.getState().zoom).toBeGreaterThan(z)
+  })
+
+  it('a 0x0 viewport relayout keeps zoom and pan; restoring the size resumes from kept state', () => {
+    const c = attach({ initial: { zoom: 1, x: 0, y: 0 } })
+    c.zoomBy(3)
+    ptr('pointerdown', 500, 400)
+    ptr('pointermove', 400, 350)
+    ptr('pointerup', 400, 350)
+    const kept = c.getState()
+    const orig = viewport.getBoundingClientRect
+    viewport.getBoundingClientRect = () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect
+    c.relayout()
+    expect(c.getState()).toEqual(kept)
+    viewport.getBoundingClientRect = orig
+    c.relayout()
+    expect(c.getState()).toEqual(kept)
+  })
+
+  it('clicking a control inside a link does not navigate', () => {
+    const a = document.createElement('a')
+    document.body.appendChild(a)
+    a.appendChild(viewport)
+    const spy = vi.fn()
+    a.addEventListener('click', spy)
+    const c = attach()
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+    btn('in').dispatchEvent(click)
+    expect(spy).not.toHaveBeenCalled()
+    expect(click.defaultPrevented).toBe(true)
+    expect(c.getState().zoom).toBeCloseTo(1.25)
+  })
+
+  it('allows 200% of natural for huge images (cap 40 for 20000 in a 1000 viewport)', () => {
+    const c = attach({ natural: { width: 20000, height: 10000 } })
+    for (let i = 0; i < 60; i++) btn('in').click()
+    expect(c.getState().zoom).toBeCloseTo(40)
+  })
+
+  it('wheel zoom scales with delta and caps one event at a notch', () => {
+    const c = attach()
+    wheel({ deltaY: -10, ctrlKey: true, clientX: 500, clientY: 400 })
+    expect(c.getState().zoom).toBeCloseTo(1.25 ** 0.1)
+    wheel({ deltaY: -1000, ctrlKey: true, clientX: 500, clientY: 400 })
+    expect(c.getState().zoom).toBeCloseTo(1.25 ** 1.1)
+    wheel({ deltaY: -3, deltaMode: 1, ctrlKey: true, clientX: 500, clientY: 400 }) // 48px
+    expect(c.getState().zoom).toBeCloseTo(1.25 ** 1.58)
+  })
+
   it('hover mode adds pz-hover class', () => {
     attach({ controlsOnHover: true })
     expect(viewport.classList.contains('pz-hover')).toBe(true)

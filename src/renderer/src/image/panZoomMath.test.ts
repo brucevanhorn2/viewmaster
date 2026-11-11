@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fitSize, fitState, zoomAt, clampState, panBy, MAX_ZOOM } from './panZoomMath'
+import { fitSize, fitState, zoomAt, clampState, panBy, maxZoomFor, MAX_ZOOM } from './panZoomMath'
 
 const fit = { width: 1000, height: 500 }
 const vp = { width: 1000, height: 800 }
@@ -66,5 +66,21 @@ describe('panBy', () => {
     const s = { zoom: 2, x: -400, y: 0 }
     expect(panBy(s, -99999, 0, fit, vp).x).toBe(vp.width - fit.width * 2)
     expect(panBy(s, 99999, 0, fit, vp).x).toBe(0)
+  })
+})
+
+describe('zero viewport and dynamic max zoom', () => {
+  it('fitSize is null for a 0-size viewport', () => {
+    expect(fitSize({ width: 100, height: 100 }, { width: 0, height: 0 })).toBeNull()
+    expect(fitSize({ width: 100, height: 100 }, { width: 50, height: 0 })).toBeNull()
+  })
+  it('maxZoomFor allows 200% of natural, never below MAX_ZOOM', () => {
+    expect(maxZoomFor({ width: 20000, height: 10000 }, { width: 1000, height: 500 })).toBe(40)
+    expect(maxZoomFor({ width: 500, height: 500 }, { width: 500, height: 500 })).toBe(MAX_ZOOM)
+  })
+  it('clampState/zoomAt/panBy honor a custom maxZoom', () => {
+    expect(clampState({ zoom: 99, x: 0, y: 0 }, fit, vp, 40).zoom).toBe(40)
+    expect(zoomAt({ zoom: 30, x: 0, y: 0 }, 2, { x: 0, y: 0 }, fit, vp, 40).zoom).toBe(40)
+    expect(panBy({ zoom: 30, x: 0, y: 0 }, 0, 0, fit, vp, 40).zoom).toBe(30)
   })
 })

@@ -5,6 +5,7 @@ import {
   clampState,
   fitSize,
   fitState,
+  maxZoomFor,
   panBy,
   zoomAt
 } from './panZoomMath'
@@ -53,6 +54,7 @@ export function attachPanZoom(
   const ctSnap = snapshot(content)
   let natural = opts.natural
   let fit: Size | null = null
+  let maxZoom = 8
   let state: PanZoomState = { zoom: 1, x: 0, y: 0 }
   let dragging = false
   let moved = false
@@ -68,8 +70,9 @@ export function attachPanZoom(
   const controls = document.createElement('div')
   controls.className = 'pz-controls'
   controls.innerHTML =
-    '<button type="button" data-pz="out">−</button><span data-pz="pct">100%</span>' +
-    '<button type="button" data-pz="in">+</button><button type="button" data-pz="fit">Fit</button>'
+    '<button type="button" data-pz="out" aria-label="Zoom out" title="Zoom out">−</button><span data-pz="pct">100%</span>' +
+    '<button type="button" data-pz="in" aria-label="Zoom in" title="Zoom in">+</button>' +
+    '<button type="button" data-pz="fit" aria-label="Fit to view" title="Fit to view">Fit</button>'
   viewport.appendChild(controls)
   const pct = controls.querySelector('[data-pz=pct]') as HTMLElement
 
@@ -86,13 +89,15 @@ export function attachPanZoom(
   }
   function set(s: PanZoomState): void {
     if (!fit) return
-    state = clampState(s, fit, vp())
+    state = clampState(s, fit, vp(), maxZoom)
     apply()
   }
   function layout(initial?: PanZoomState): void {
-    fit = fitSize(natural, vp())
-    if (!fit) return
-    state = initial ? clampState(initial, fit, vp()) : fitState(fit, vp())
+    const f = fitSize(natural, vp())
+    if (!f) return // unusable size (e.g. 0x0 viewport): keep the current fit and state
+    fit = f
+    maxZoom = maxZoomFor(natural, f)
+    state = initial ? clampState(initial, f, vp(), maxZoom) : fitState(f, vp())
     apply()
   }
   const center = (): { x: number; y: number } => {
@@ -105,21 +110,23 @@ export function attachPanZoom(
     if (e.ctrlKey) {
       e.preventDefault()
       const r = viewport.getBoundingClientRect()
-      const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP
-      state = zoomAt(state, factor, { x: e.clientX - r.left, y: e.clientY - r.top }, fit, vp())
+      const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? vp().height : 1)
+      const factor = ZOOM_STEP ** Math.min(1, Math.max(-1, -px / 100))
+      state = zoomAt(state, factor, { x: e.clientX - r.left, y: e.clientY - r.top }, fit, vp(), maxZoom)
       apply()
     } else if (opts.wheelPans) {
       e.preventDefault()
       state = e.shiftKey
-        ? panBy(state, -(e.deltaX || e.deltaY), 0, fit, vp())
-        : panBy(state, -e.deltaX, -e.deltaY, fit, vp())
+        ? panBy(state, -(e.deltaX || e.deltaY), 0, fit, vp(), maxZoom)
+        : panBy(state, -e.deltaX, -e.deltaY, fit, vp(), maxZoom)
       apply()
     }
   }
   const onDown = (e: PointerEvent): void => {
-    if (e.button !== 0 || !fit || controls.contains(e.target as Node)) return
-    dragging = true
     moved = false
+    if (e.button !== 0 || !fit || controls.contains(e.target as Node)) return
+    e.preventDefault() // stops native image drag / text selection
+    dragging = true
     down = last = { x: e.clientX, y: e.clientY }
     viewport.classList.add('pz-dragging')
     if (typeof viewport.setPointerCapture === 'function' && e.pointerId !== undefined) {
@@ -133,7 +140,7 @@ export function attachPanZoom(
   const onMove = (e: PointerEvent): void => {
     if (!dragging || !fit) return
     if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > DRAG_THRESHOLD) moved = true
-    state = panBy(state, e.clientX - last.x, e.clientY - last.y, fit, vp())
+    state = panBy(state, e.clientX - last.x, e.clientY - last.y, fit, vp(), maxZoom)
     last = { x: e.clientX, y: e.clientY }
     apply()
   }
@@ -141,6 +148,11 @@ export function attachPanZoom(
     dragging = false
     viewport.classList.remove('pz-dragging')
   }
+  const onCancel = (): void => {
+    moved = false
+    onUp()
+  }
+  const onDragStart = (e: Event): void => e.preventDefault()
   const onClick = (e: MouseEvent): void => {
     if (!moved) return
     moved = false
@@ -148,6 +160,8 @@ export function attachPanZoom(
     e.stopPropagation()
   }
   const onControls = (e: Event): void => {
+    e.preventDefault()
+    e.stopPropagation()
     const k = (e.target as HTMLElement).closest('[data-pz]')?.getAttribute('data-pz')
     if (k === 'in') api.zoomBy(ZOOM_STEP)
     else if (k === 'out') api.zoomBy(1 / ZOOM_STEP)
@@ -158,7 +172,8 @@ export function attachPanZoom(
   viewport.addEventListener('pointerdown', onDown as EventListener)
   viewport.addEventListener('pointermove', onMove as EventListener)
   viewport.addEventListener('pointerup', onUp)
-  viewport.addEventListener('pointercancel', onUp)
+  viewport.addEventListener('pointercancel', onCancel)
+  viewport.addEventListener('dragstart', onDragStart)
   viewport.addEventListener('click', onClick, true)
   controls.addEventListener('click', onControls)
   const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => api.relayout()) : null
@@ -167,7 +182,7 @@ export function attachPanZoom(
   const api: PanZoomController = {
     getState: () => ({ ...state }),
     zoomBy(factor) {
-      if (fit) set(zoomAt(state, factor, center(), fit, vp()))
+      if (fit) set(zoomAt(state, factor, center(), fit, vp(), maxZoom))
     },
     fit() {
       if (fit) set(fitState(fit, vp()))
@@ -182,7 +197,8 @@ export function attachPanZoom(
       viewport.removeEventListener('pointerdown', onDown as EventListener)
       viewport.removeEventListener('pointermove', onMove as EventListener)
       viewport.removeEventListener('pointerup', onUp)
-      viewport.removeEventListener('pointercancel', onUp)
+      viewport.removeEventListener('pointercancel', onCancel)
+      viewport.removeEventListener('dragstart', onDragStart)
       viewport.removeEventListener('click', onClick, true)
       controls.remove()
       restore(viewport, vpSnap)

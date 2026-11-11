@@ -963,6 +963,7 @@ body {
   position: relative;
   overflow: hidden;
   cursor: grab;
+  user-select: none;
 }
 .pz-viewport.pz-dragging {
   cursor: grabbing;
@@ -974,6 +975,8 @@ body {
   transform-origin: 0 0;
   max-width: none;
   max-height: none;
+  -webkit-user-drag: none;
+  user-select: none;
 }
 .pz-controls {
   position: absolute;
