@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from 'vitest'
-import { mkdtemp, mkdir, writeFile, rm } from 'fs/promises'
+import { mkdtemp, mkdir, writeFile, rm, symlink } from 'fs/promises'
 import { existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -25,6 +25,15 @@ afterAll(async () => {
 
 const win = process.platform === 'win32'
 const goplsName = win ? 'gopls.exe' : 'gopls'
+/** A minimal venv at root/name: pyvenv.cfg plus both interpreter layouts. */
+async function makeVenv(dir: string): Promise<void> {
+  await mkdir(join(dir, 'Scripts'), { recursive: true })
+  await mkdir(join(dir, 'bin'), { recursive: true })
+  await writeFile(join(dir, 'Scripts', 'python.exe'), '')
+  await writeFile(join(dir, 'bin', 'python'), '')
+  await writeFile(join(dir, 'pyvenv.cfg'), 'home = /usr/bin\n')
+}
+
 async function fakeExe(dir: string, name: string): Promise<void> {
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, name), '#!/bin/sh\n', { mode: 0o755 })
@@ -82,23 +91,56 @@ describe('goplsCommand', () => {
 describe('findVenvPython', () => {
   it('prefers .venv over venv', async () => {
     const root = await tmp()
-    await mkdir(join(root, '.venv', 'bin'), { recursive: true })
-    await writeFile(join(root, '.venv', 'bin', 'python'), '')
-    await mkdir(join(root, 'venv', 'bin'), { recursive: true })
-    await writeFile(join(root, 'venv', 'bin', 'python'), '')
+    await makeVenv(join(root, '.venv'))
+    await makeVenv(join(root, 'venv'))
     expect(await findVenvPython(root, 'linux')).toBe(join(root, '.venv', 'bin', 'python'))
   })
   it('falls back to venv', async () => {
     const root = await tmp()
-    await mkdir(join(root, 'venv', 'bin'), { recursive: true })
-    await writeFile(join(root, 'venv', 'bin', 'python'), '')
+    await makeVenv(join(root, 'venv'))
     expect(await findVenvPython(root, 'linux')).toBe(join(root, 'venv', 'bin', 'python'))
   })
   it('uses Scripts/python.exe on win32', async () => {
     const root = await tmp()
-    await mkdir(join(root, '.venv', 'Scripts'), { recursive: true })
-    await writeFile(join(root, '.venv', 'Scripts', 'python.exe'), '')
+    await makeVenv(join(root, '.venv'))
     expect(await findVenvPython(root, 'win32')).toBe(join(root, '.venv', 'Scripts', 'python.exe'))
+  })
+  it('rejects a venv dir without pyvenv.cfg', async () => {
+    const root = await tmp()
+    await mkdir(join(root, '.venv', 'bin'), { recursive: true })
+    await writeFile(join(root, '.venv', 'bin', 'python'), '')
+    expect(await findVenvPython(root, 'linux')).toBeNull()
+  })
+  it('skips an invalid .venv and falls back to a valid venv', async () => {
+    const root = await tmp()
+    await mkdir(join(root, '.venv', 'bin'), { recursive: true })
+    await writeFile(join(root, '.venv', 'bin', 'python'), '')
+    await makeVenv(join(root, 'venv'))
+    expect(await findVenvPython(root, 'linux')).toBe(join(root, 'venv', 'bin', 'python'))
+  })
+  it('rejects a venv link that escapes the workspace', async (ctx) => {
+    const root = await tmp()
+    const outside = await tmp()
+    await makeVenv(outside) // otherwise valid, so only the escape can reject it
+    try {
+      await symlink(outside, join(root, '.venv'), win ? 'junction' : 'dir')
+    } catch {
+      ctx.skip()
+    }
+    expect(await findVenvPython(root, 'linux')).toBeNull()
+    expect(await findVenvPython(root, 'win32')).toBeNull()
+    const roots = await externalRootsFor('python', root, {})
+    expect(roots.map((r) => r.kind)).toEqual(['python-stubs'])
+  })
+  it('accepts a venv link that stays inside the workspace', async (ctx) => {
+    const root = await tmp()
+    await makeVenv(join(root, 'envs', 'py'))
+    try {
+      await symlink(join(root, 'envs', 'py'), join(root, '.venv'), win ? 'junction' : 'dir')
+    } catch {
+      ctx.skip()
+    }
+    expect(await findVenvPython(root, 'linux')).toBe(join(root, '.venv', 'bin', 'python'))
   })
   it('returns null with no venv', async () => {
     expect(await findVenvPython(await tmp(), 'linux')).toBeNull()
@@ -130,12 +172,18 @@ describe('pyright', () => {
 describe('externalRootsFor', () => {
   it('python: venv + stubs', async () => {
     const root = await tmp()
+    await makeVenv(join(root, '.venv'))
+    const roots = await externalRootsFor('python', root, {})
+    expect(roots.map((r) => r.kind)).toEqual(['python-venv', 'python-stubs'])
+  })
+  it('python: no venv root for a venv dir without pyvenv.cfg', async () => {
+    const root = await tmp()
     await mkdir(join(root, '.venv', 'Scripts'), { recursive: true })
     await mkdir(join(root, '.venv', 'bin'), { recursive: true })
     await writeFile(join(root, '.venv', 'Scripts', 'python.exe'), '')
     await writeFile(join(root, '.venv', 'bin', 'python'), '')
     const roots = await externalRootsFor('python', root, {})
-    expect(roots.map((r) => r.kind)).toEqual(['python-venv', 'python-stubs'])
+    expect(roots.map((r) => r.kind)).toEqual(['python-stubs'])
   })
   it('python: stubs only without venv', async () => {
     const roots = await externalRootsFor('python', await tmp(), {})

@@ -5,6 +5,7 @@ import { createRequire } from 'module'
 import { dirname, join } from 'path'
 import type { LspLanguage } from '../../shared/types'
 import { goExternalRoots, type ExternalRoot } from '../files/externalRoots'
+import { isInsideRoot } from '../files/resource'
 import type { ServerCommand } from './client'
 
 async function isExecutable(file: string, platform: NodeJS.Platform): Promise<boolean> {
@@ -64,14 +65,39 @@ export function goplsCommand(goplsPath: string, env: NodeJS.ProcessEnv): ServerC
   return { command: goplsPath, args: ['serve'], env }
 }
 
-/** Workspace virtualenv interpreter: .venv then venv. */
+/**
+ * True when `venvDir` is a real virtualenv (has pyvenv.cfg) whose realpath
+ * stays strictly inside realpath(workspaceRoot). The venv dir becomes an
+ * allow-listed read root, so a committed `.venv -> /` link must not count.
+ * Only the dir is checked: <venv>/bin/python is normally a symlink to the
+ * system interpreter.
+ */
+async function isTrustedVenvDir(venvDir: string, realRoot: string): Promise<boolean> {
+  try {
+    const realDir = await realpath(venvDir)
+    if (realDir === realRoot || !isInsideRoot(realDir, realRoot)) return false
+    return (await stat(join(realDir, 'pyvenv.cfg'))).isFile()
+  } catch {
+    return false
+  }
+}
+
+/** Workspace virtualenv interpreter: .venv then venv (see isTrustedVenvDir). */
 export async function findVenvPython(
   workspaceRoot: string,
   platform: NodeJS.Platform = process.platform
 ): Promise<string | null> {
+  let realRoot: string
+  try {
+    realRoot = await realpath(workspaceRoot)
+  } catch {
+    return null
+  }
   const rel = platform === 'win32' ? join('Scripts', 'python.exe') : join('bin', 'python')
   for (const name of ['.venv', 'venv']) {
-    const candidate = join(workspaceRoot, name, rel)
+    const dir = join(workspaceRoot, name)
+    if (!(await isTrustedVenvDir(dir, realRoot))) continue
+    const candidate = join(dir, rel)
     try {
       if ((await stat(candidate)).isFile()) return candidate
     } catch {
@@ -113,7 +139,8 @@ export async function externalRootsFor(
   const roots: ExternalRoot[] = []
   const py = await findVenvPython(workspaceRoot)
   if (py) {
-    // <venv>/Scripts/python.exe or <venv>/bin/python -> venv dir
+    // <venv>/Scripts/python.exe or <venv>/bin/python -> venv dir, which
+    // findVenvPython has already confined to the workspace.
     try {
       roots.push({ kind: 'python-venv', dir: await realpath(dirname(dirname(py))) })
     } catch {
