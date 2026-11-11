@@ -4,7 +4,12 @@ import { constants } from 'fs'
 import { createRequire } from 'module'
 import { dirname, join } from 'path'
 import type { LspLanguage } from '../../shared/types'
-import { goExternalRoots, type ExternalRoot } from '../files/externalRoots'
+import {
+  goExternalRoots,
+  goWorkspaceRoots,
+  pythonPackageRoots,
+  type ExternalRoot
+} from '../files/externalRoots'
 import { isInsideRoot } from '../files/resource'
 import type { ServerCommand } from './client'
 
@@ -129,29 +134,33 @@ export function pyrightStubsDir(): string {
   return join(pyrightPackageDir(), 'dist', 'typeshed-fallback')
 }
 
-/** Allow-list roots (realpath'd) for reading files outside the workspace. */
+/**
+ * Allow-list roots (realpath'd) for reading files outside the workspace. Go: GOROOT,
+ * GOMODCACHE, and go.work / local-replace modules. Python: pyright's stubs and the
+ * interpreter's package dirs. `venvPython` is the interpreter pyright was started with
+ * (pass the same lookup used for pyrightCommand); undefined looks it up.
+ */
 export async function externalRootsFor(
   language: LspLanguage,
   workspaceRoot: string,
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  venvPython?: string | null
 ): Promise<ExternalRoot[]> {
-  if (language === 'go') return goExternalRoots(env, workspaceRoot)
-  const roots: ExternalRoot[] = []
-  const py = await findVenvPython(workspaceRoot)
-  if (py) {
-    // <venv>/Scripts/python.exe or <venv>/bin/python -> venv dir, which
-    // findVenvPython has already confined to the workspace.
-    try {
-      roots.push({ kind: 'python-venv', dir: await realpath(dirname(dirname(py))) })
-    } catch {
-      // ignore
-    }
+  if (language === 'go') {
+    const [std, ws] = await Promise.all([
+      goExternalRoots(env, workspaceRoot),
+      goWorkspaceRoots(env, workspaceRoot)
+    ])
+    return [...std, ...ws]
   }
+  const py = venvPython === undefined ? await findVenvPython(workspaceRoot) : venvPython
+  const roots: ExternalRoot[] = []
   try {
     roots.push({ kind: 'python-stubs', dir: await realpath(pyrightStubsDir()) })
   } catch {
     // ignore
   }
+  roots.push(...(await pythonPackageRoots(py, env, workspaceRoot)))
   return roots
 }
 

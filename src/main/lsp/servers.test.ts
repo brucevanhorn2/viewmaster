@@ -170,11 +170,11 @@ describe('pyright', () => {
 })
 
 describe('externalRootsFor', () => {
-  it('python: venv + stubs', async () => {
+  it('python: an in-folder venv is not an outside root (its files are in-folder)', async () => {
     const root = await tmp()
     await makeVenv(join(root, '.venv'))
     const roots = await externalRootsFor('python', root, {})
-    expect(roots.map((r) => r.kind)).toEqual(['python-venv', 'python-stubs'])
+    expect(roots.map((r) => r.kind)).toEqual(['python-stubs'])
   })
   it('python: no venv root for a venv dir without pyvenv.cfg', async () => {
     const root = await tmp()

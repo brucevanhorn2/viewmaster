@@ -3,7 +3,8 @@ import type { ExternalKind } from '@shared/types'
 const LABELS: Record<ExternalKind, string> = {
   'go-stdlib': 'Go standard library',
   'go-modcache': 'Go module cache',
-  'python-venv': 'Python venv',
+  'go-workspace': 'Go workspace module',
+  'python-packages': 'Python packages',
   'python-stubs': 'Python stubs'
 }
 

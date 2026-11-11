@@ -78,7 +78,12 @@ export interface SymbolLocation {
 
 export type LspLanguage = 'go' | 'python'
 export type ApproximateReason = 'starting' | 'not-installed' | 'unavailable'
-export type ExternalKind = 'go-stdlib' | 'go-modcache' | 'python-venv' | 'python-stubs'
+export type ExternalKind =
+  | 'go-stdlib'
+  | 'go-modcache'
+  | 'go-workspace'
+  | 'python-packages'
+  | 'python-stubs'
 
 export interface SymbolQuery {
   word: string

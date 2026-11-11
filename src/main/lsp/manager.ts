@@ -235,13 +235,22 @@ export class LspManager {
 
 /** Production manager: user's gopls, bundled pyright with the workspace venv. */
 export function createLspManager(workspaceRoot: string): LspManager {
+  // One venv lookup per pyright start, shared by its command and its allow-list roots so
+  // the interpreter and the readable package dirs can't drift apart.
+  let venv: Promise<string | null> | null = null
+  const venvPython = (): Promise<string | null> => (venv ??= findVenvPython(workspaceRoot))
   return new LspManager(workspaceRoot, {
     async commandFor(lang) {
       if (lang === 'go') {
         const gopls = await findGopls(process.env)
         return gopls ? goplsCommand(gopls, process.env) : null
       }
-      return pyrightCommand(await findVenvPython(workspaceRoot))
+      venv = null // a (re)start re-detects the venv
+      return pyrightCommand(await venvPython())
+    },
+    async externalRootsFor(lang, root) {
+      const py = lang === 'python' ? await venvPython() : undefined
+      return realExternalRootsFor(lang, root, process.env, py)
     }
   })
 }
