@@ -3,9 +3,10 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { createElement, act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 
+const mdHtml = vi.hoisted(() => ({ value: '<p id="p">hello</p>' }))
 vi.mock('../markdown/render', () => ({
-  renderMarkdown: async () => '<p id="p">hello</p>',
-  renderMarkdownToHtml: async () => '<p id="p">hello</p>',
+  renderMarkdown: async () => mdHtml.value,
+  renderMarkdownToHtml: async () => mdHtml.value,
   sanitizeHtml: (s: string) => s,
   escapeHtml: (s: string) => s
 }))
@@ -33,7 +34,13 @@ describe('MarkdownView', () => {
       workspaceRoot: '/',
       onNavigate: () => {},
       scrollToAnchor: null,
-      onAnchorConsumed: () => {}
+      onAnchorConsumed: () => {},
+      images: {
+        readLocal: async () => null,
+        readRemote: async () => null,
+        allowRemote: false,
+        onAllowRemote: () => {}
+      }
     }
     await act(async () => root!.render(createElement(MarkdownView, props)))
     const p = host.querySelector('#p')!
@@ -43,5 +50,42 @@ describe('MarkdownView', () => {
     await act(async () => root!.render(createElement(MarkdownView, { ...props })))
     expect(host.querySelector('#p')).toBe(p)
     expect(host.querySelector('#p')!.getAttribute('data-mark')).toBe('1')
+  })
+})
+
+describe('MarkdownView images', () => {
+  it('resolves local images, blocks remote until allowed', async () => {
+    mdHtml.value = '<p><img src="a.png" alt="A"><img src="https://t/b.png"></p>'
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    root = createRoot(host)
+    const readLocal = vi.fn(async () => ({ base64: 'AAAA', mime: 'image/png' }))
+    const readRemote = vi.fn(async () => ({ base64: 'BBBB', mime: 'image/png' }))
+    const onAllowRemote = vi.fn()
+    const mk = (allowRemote: boolean) => ({
+      content: '# x',
+      absPath: '/d/a.md',
+      workspaceRoot: '/d',
+      onNavigate: () => {},
+      scrollToAnchor: null,
+      onAnchorConsumed: () => {},
+      images: { readLocal, readRemote, allowRemote, onAllowRemote }
+    })
+    await act(async () => root!.render(createElement(MarkdownView, mk(false))))
+    expect(host.querySelector('img[src^="data:image/png"]')).toBeTruthy()
+    expect(host.querySelectorAll('.md-img-remote').length).toBe(1)
+    expect(host.querySelector('.remote-images-bar')!.textContent).toContain(
+      'This document has 1 remote image'
+    )
+    expect(readRemote).not.toHaveBeenCalled()
+    await act(async () => {
+      ;(host.querySelector('.remote-images-bar button') as HTMLButtonElement).click()
+    })
+    expect(onAllowRemote).toHaveBeenCalled()
+    await act(async () => root!.render(createElement(MarkdownView, mk(true))))
+    expect(readRemote).toHaveBeenCalledWith('https://t/b.png')
+    expect(host.querySelector('.md-img-remote')).toBeNull()
+    expect(host.querySelectorAll('img').length).toBe(2)
+    expect(host.querySelector('.remote-images-bar')).toBeNull()
   })
 })

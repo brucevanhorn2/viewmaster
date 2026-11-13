@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { join } from 'path'
-import { readCurrentFile, readBaseFile, isRasterImagePath, isPdfPath } from './content'
+import { readCurrentFile, readBaseFile, readBaseBlob, isRasterImagePath, isPdfPath } from './content'
 import { makeRepo, type TestRepo } from './testRepo'
 
 let repo: TestRepo
@@ -186,5 +186,50 @@ describe('readBaseFile', () => {
 
   it('returns empty string when there is no baseline', async () => {
     expect(await readBaseFile(repo.root, null, 'a.txt')).toBe('')
+  })
+})
+
+describe('readBaseBlob', () => {
+  const PNG = [0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 255]
+
+  async function commitPng(): Promise<string> {
+    await repo.write('img/a.png', Buffer.from(PNG))
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'initial')
+    const base = (await repo.git('rev-parse', 'HEAD')).stdout.trim()
+    await repo.write('img/a.png', Buffer.from([1, 2, 3]))
+    return base
+  }
+
+  it('readBaseBlob returns committed bytes byte-for-byte', async () => {
+    const base = await commitPng()
+    const buf = await readBaseBlob(repo.root, base, 'img/a.png')
+    expect([...buf!]).toEqual(PNG)
+  })
+
+  it('readBaseBlob returns null for a path missing at base', async () => {
+    const base = await commitPng()
+    expect(await readBaseBlob(repo.root, base, 'img/nope.png')).toBeNull()
+  })
+
+  it('readBaseBlob returns null for base null', async () => {
+    await commitPng()
+    expect(await readBaseBlob(repo.root, null, 'img/a.png')).toBeNull()
+  })
+
+  it('readBaseBlob returns null for a Git LFS pointer', async () => {
+    await repo.write(
+      'img/big.png',
+      'version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 123\n'
+    )
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'lfs')
+    const base = (await repo.git('rev-parse', 'HEAD')).stdout.trim()
+    expect(await readBaseBlob(repo.root, base, 'img/big.png')).toBeNull()
+  })
+
+  it('readBaseBlob returns null for a directory path at base', async () => {
+    const base = await commitPng()
+    expect(await readBaseBlob(repo.root, base, 'img')).toBeNull()
   })
 })

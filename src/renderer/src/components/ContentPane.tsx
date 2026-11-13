@@ -1,10 +1,12 @@
-import { useEffect, useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import type { ChangedFile, ExternalKind, FileContent, HistoryVersion } from '@shared/types'
 import { isDefaultSelection, type RevisionRef, type Selection } from '../history/selection'
 import type { NavigationTarget } from '../navigation/history'
 import CodeView from './CodeView'
 import DiffView from './DiffView'
-import MarkdownView from './MarkdownView'
+import MarkdownView, { type MarkdownImages } from './MarkdownView'
+import { cachedReader } from '../markdown/images'
+import { useRemoteAllowance } from '../markdown/remoteAllowance'
 import MarkdownSideBySideView from './MarkdownSideBySideView'
 import HtmlView from './HtmlView'
 import Placeholder from './Placeholder'
@@ -40,6 +42,7 @@ function isSvg(path: string): boolean {
 export default function ContentPane({
   file,
   refreshKey,
+  baselineKey,
   selection,
   versions,
   workspaceRoot,
@@ -53,6 +56,7 @@ export default function ContentPane({
 }: {
   file: ChangedFile | null
   refreshKey: number
+  baselineKey: string
   selection: Selection
   versions: HistoryVersion[]
   workspaceRoot: string
@@ -184,6 +188,45 @@ export default function ContentPane({
     }
   }, [file, mode, selection, refreshKey])
 
+  // Readers are cached per file, baseline and document text, so repeated/concurrent image
+  // reads share one IPC call. Keyed on the text (not refreshKey): an unrelated change
+  // elsewhere in the repo must not re-render the document and re-read every image.
+  // Editing the .md re-reads its images; an image edited on its own shows on reopen.
+  const absPathKey = file?.absPath ?? null
+  const docText = content?.kind === 'text' ? content.content : null
+  const diskReader = useMemo(
+    () => cachedReader((p: string) => window.viewmaster.readResource(p)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [absPathKey, docText]
+  )
+  // The baseline key names a ref (HEAD, a branch), not a commit, so a commit or checkout can
+  // move it without changing the doc text; refreshKey keeps baseline images in step. This
+  // reader is only used by the baseline side of side-by-side.
+  const baselineReader = useMemo(
+    () => cachedReader((p: string) => window.viewmaster.readBaseResource(p)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [absPathKey, docText, baselineKey, refreshKey]
+  )
+  // Remote cache survives an on-disk refresh of the same file (keyed on absPath only).
+  // Failures aren't kept, so a re-render after a network blip tries again.
+  const remoteReader = useMemo(
+    () =>
+      cachedReader((u: string) => window.viewmaster.fetchRemoteImage(u), { retryFailures: true }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [absPathKey]
+  )
+  const readers = { disk: diskReader, baseline: baselineReader, remote: remoteReader }
+  const [allowRemote, allowRemoteNow] = useRemoteAllowance(absPathKey)
+  const imagesFor = (read: typeof readers.disk): MarkdownImages => ({
+    readLocal: read,
+    readRemote: readers.remote,
+    allowRemote,
+    onAllowRemote: allowRemoteNow
+  })
+  // Baseline side reads from the git baseline; 'now' and local-history sides read from disk.
+  const sideImages = (ref: RevisionRef): MarkdownImages =>
+    imagesFor(ref === 'baseline' ? readers.baseline : readers.disk)
+
   if (!file) {
     return (
       <div className="content-pane">
@@ -251,6 +294,7 @@ export default function ContentPane({
           onNavigate={onMarkdownNavigate}
           scrollToAnchor={anchorTarget}
           onAnchorConsumed={onTargetConsumed}
+          images={imagesFor(readers.disk)}
         />
       )
   } else if (
@@ -274,6 +318,8 @@ export default function ContentPane({
           onNavigate={onMarkdownNavigate}
           scrollToAnchor={anchorTarget}
           onAnchorConsumed={onTargetConsumed}
+          oldImages={sideImages(selection.base)}
+          newImages={sideImages(selection.compare)}
         />
       )
   } else if (content.kind === 'image') {
@@ -306,6 +352,7 @@ export default function ContentPane({
         onNavigate={onMarkdownNavigate}
         scrollToAnchor={anchorTarget}
         onAnchorConsumed={onTargetConsumed}
+        images={imagesFor(readers.disk)}
       />
     )
   } else if (mode === 'code' && isHtml(file.path)) {

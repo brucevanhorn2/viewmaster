@@ -1,7 +1,7 @@
 import { readFile, realpath, stat } from 'fs/promises'
 import { extname, isAbsolute, relative, resolve } from 'path'
 
-const MAX_RESOURCE_SIZE = 10 * 1024 * 1024
+export const MAX_RESOURCE_SIZE = 10 * 1024 * 1024
 
 const MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
@@ -11,6 +11,8 @@ const MIME_BY_EXT: Record<string, string> = {
   '.svg': 'image/svg+xml',
   '.webp': 'image/webp',
   '.ico': 'image/x-icon',
+  '.bmp': 'image/bmp',
+  '.avif': 'image/avif',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.ttf': 'font/ttf',
@@ -18,7 +20,7 @@ const MIME_BY_EXT: Record<string, string> = {
   '.css': 'text/css'
 }
 
-function mimeFor(absPath: string): string {
+export function mimeFor(absPath: string): string {
   return MIME_BY_EXT[extname(absPath).toLowerCase()] ?? 'application/octet-stream'
 }
 
@@ -82,4 +84,30 @@ export async function readResource(
   } catch {
     return null
   }
+}
+
+const IMAGE_MIMES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+  'image/bmp',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+  'image/jpg',
+  'image/avif'
+])
+
+/** True for the image MIME types mimeFor produces, plus common server aliases (image/jpg, image/vnd.microsoft.icon). */
+export function isImageMime(mime: string): boolean {
+  return IMAGE_MIMES.has(mime)
+}
+
+/** Repo-relative, forward-slash path of absPath under root; null if it is the root or escapes it. */
+export function relForBase(root: string, absPath: string): string | null {
+  const abs = resolve(absPath)
+  if (!isInsideRoot(abs, root)) return null
+  const rel = relative(root, abs)
+  return rel ? rel.split('\\').join('/') : null
 }

@@ -5,6 +5,16 @@ import { useDocumentPanZoom } from '../markdown/useDocumentPanZoom'
 import { composeMarks } from '../markdown/marksDiff'
 import { classifyLinkHref } from '../markdown/links'
 import { scrollToId } from '../markdown/scrollToId'
+import { resolveMarkdownImages, resolveMarkdownImagesProgressive, type ImageResult } from '../markdown/images'
+import type { ResourceReader } from '../html/render'
+import RemoteImagesBar from './RemoteImagesBar'
+
+export interface MarkdownImages {
+  readLocal: ResourceReader
+  readRemote: (url: string) => Promise<{ base64: string; mime: string } | null>
+  allowRemote: boolean
+  onAllowRemote: () => void
+}
 
 /**
  * Rendered markdown. When `baseContent` is a string (possibly ''), renders
@@ -18,7 +28,8 @@ export default function MarkdownView({
   workspaceRoot,
   onNavigate,
   scrollToAnchor = null,
-  onAnchorConsumed
+  onAnchorConsumed,
+  images
 }: {
   content: string
   baseContent?: string | null
@@ -27,9 +38,15 @@ export default function MarkdownView({
   onNavigate: (absPath: string, anchor?: string) => void
   scrollToAnchor?: string | null
   onAnchorConsumed: () => void
+  images: MarkdownImages
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [html, setHtml] = useState('')
+  // Remote-image count is tagged with the path it was computed for, so a just-switched
+  // file never shows the previous file's bar.
+  const [remoteInfo, setRemoteInfo] = useState<{ path: string; count: number } | null>(null)
+  const remoteCount = remoteInfo?.path === absPath ? remoteInfo.count : 0
+  const { readLocal, readRemote, allowRemote, onAllowRemote } = images
   // Tracks which absPath the currently-rendered `html` state actually
   // belongs to. Since rendering is async, `html` can briefly still hold the
   // previous document's markup after `absPath` has already switched to a new
@@ -49,23 +66,44 @@ export default function MarkdownView({
       return sanitizeHtml(composeMarks(oldHtml, newHtml))
     }
 
+    // Images resolve against the rendered HTML; a stale result (file/content/allowance
+    // changed meanwhile) is discarded by the same flag as the render itself.
+    const imageOpts = { docAbsPath: absPath, workspaceRoot, readLocal, readRemote, allowRemote }
+    // `ready` is false for the interim loading-boxes render: images will still change the
+    // layout, so a pending heading anchor must wait for the final render to scroll.
+    const show = (r: ImageResult, ready = true): void => {
+      if (stale) return
+      htmlForPath.current = ready ? absPath : null
+      setRemoteInfo({ path: absPath, count: r.remoteUrls.length })
+      setHtml(r.html)
+    }
+    const withImages = async (rendered: string): Promise<ImageResult> => {
+      try {
+        return await resolveMarkdownImages(rendered, imageOpts)
+      } catch {
+        return { html: rendered, remoteUrls: [] }
+      }
+    }
+
     render()
-      .then((rendered) => {
-        if (!stale) {
-          htmlForPath.current = absPath
-          setHtml(rendered)
-        }
-      })
+      // Slow image reads never hold the text back: it shows first with loading boxes.
+      .then((rendered) =>
+        resolveMarkdownImagesProgressive(rendered, imageOpts, (r) => show(r, false)).catch(
+          (): ImageResult => ({ html: rendered, remoteUrls: [] })
+        )
+      )
+      .then((r) => show(r))
       .catch(async (err: unknown) => {
         if (stale) return
         const message = err instanceof Error ? err.message : String(err)
         if (baseContent !== null) {
           // Marks composition failed — fall back to the plain rendered view.
           try {
-            const plain = await renderMarkdown(content)
+            const plain = await withImages(await renderMarkdown(content))
             if (!stale) {
               htmlForPath.current = absPath
-              setHtml(`<p><em>Marks unavailable: ${escapeHtml(message)}</em></p>${plain}`)
+              setRemoteInfo({ path: absPath, count: plain.remoteUrls.length })
+              setHtml(`<p><em>Marks unavailable: ${escapeHtml(message)}</em></p>${plain.html}`)
             }
             return
           } catch {
@@ -74,6 +112,7 @@ export default function MarkdownView({
         }
         if (!stale) {
           htmlForPath.current = absPath
+          setRemoteInfo({ path: absPath, count: 0 })
           setHtml(
             `<p><em>Markdown rendering failed: ${escapeHtml(message)}</em></p><pre><code>${escapeHtml(content)}</code></pre>`
           )
@@ -83,7 +122,7 @@ export default function MarkdownView({
     return () => {
       stale = true
     }
-  }, [content, baseContent, absPath])
+  }, [content, baseContent, absPath, workspaceRoot, readLocal, readRemote, allowRemote])
 
   useDocumentPanZoom(ref, html, absPath)
   // Stable prop object: React 19 re-assigns innerHTML whenever this object changes,
@@ -119,6 +158,7 @@ export default function MarkdownView({
 
   return (
     <div className="markdown-scroll">
+      <RemoteImagesBar count={allowRemote ? 0 : remoteCount} onLoad={onAllowRemote} />
       <div
         ref={ref}
         className="markdown-body"

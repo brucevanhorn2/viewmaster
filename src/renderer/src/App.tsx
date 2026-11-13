@@ -4,6 +4,7 @@ import 'allotment/dist/style.css'
 import * as monaco from 'monaco-editor'
 import type { ChangedFile, HistoryVersion, RepoState, SearchMatch, SidebarMode } from '@shared/types'
 import Sidebar from './components/Sidebar'
+import { baselineKey } from './markdown/baselineKey'
 import ContentPane from './components/ContentPane'
 import HistoryPane from './components/HistoryPane'
 import SearchPane from './components/SearchPane'
@@ -441,6 +442,7 @@ export default function App(): React.JSX.Element {
               <ContentPane
                 file={selected}
                 refreshKey={refreshKey}
+                baselineKey={repo?.kind === 'repo' ? baselineKey(repo.baseline) : 'none'}
                 selection={selection}
                 versions={versions}
                 workspaceRoot={repo?.root ?? ''}

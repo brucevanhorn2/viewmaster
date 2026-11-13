@@ -4,33 +4,54 @@ import { renderMarkdownToHtml } from '../markdown/render'
 import { useDocumentPanZoom } from '../markdown/useDocumentPanZoom'
 import { classifyLinkHref } from '../markdown/links'
 import { scrollToId } from '../markdown/scrollToId'
+import { resolveMarkdownImagesProgressive, type ImageResult } from '../markdown/images'
+import RemoteImagesBar from './RemoteImagesBar'
+import type { MarkdownImages } from './MarkdownView'
 
 /** Renders one pane's markdown to HTML and runs mermaid over it once mounted. */
 function usePaneHtml(
   source: string,
-  pathKey: string
-): [string, React.RefObject<HTMLDivElement | null>, React.RefObject<string | null>] {
+  pathKey: string,
+  workspaceRoot: string,
+  images: MarkdownImages
+): [string, React.RefObject<HTMLDivElement | null>, React.RefObject<string | null>, string[]] {
   const ref = useRef<HTMLDivElement>(null)
   const [html, setHtml] = useState('')
+  const [remoteInfo, setRemoteInfo] = useState<{ path: string; urls: string[] } | null>(null)
+  const remoteUrls = remoteInfo?.path === pathKey ? remoteInfo.urls : NO_URLS
   const htmlForKey = useRef<string | null>(null)
+  const { readLocal, readRemote, allowRemote } = images
 
   useEffect(() => {
     let stale = false
-    void renderMarkdownToHtml(source).then((rendered) => {
-      if (!stale) {
-        htmlForKey.current = pathKey
-        setHtml(rendered)
-      }
-    })
+    // Interim loading-boxes render: leave htmlForKey unset so an anchor scroll waits for
+    // the final layout.
+    const show = (r: ImageResult, ready = true): void => {
+      if (stale) return
+      htmlForKey.current = ready ? pathKey : null
+      setRemoteInfo({ path: pathKey, urls: r.remoteUrls })
+      setHtml(r.html)
+    }
+    void renderMarkdownToHtml(source)
+      .then((rendered) =>
+        resolveMarkdownImagesProgressive(
+          rendered,
+          { docAbsPath: pathKey, workspaceRoot, readLocal, readRemote, allowRemote },
+          (r) => show(r, false)
+        ).catch((): ImageResult => ({ html: rendered, remoteUrls: [] }))
+      )
+      .then((r) => show(r))
     return () => {
       stale = true
     }
-  }, [source, pathKey])
+  }, [source, pathKey, workspaceRoot, readLocal, readRemote, allowRemote])
 
   useDocumentPanZoom(ref, html, pathKey)
 
-  return [html, ref, htmlForKey]
+  return [html, ref, htmlForKey, remoteUrls]
 }
+
+const NO_URLS: string[] = []
 
 /**
  * Renders `baseContent` and `content` as two independent, fully-rendered
@@ -50,7 +71,9 @@ export default function MarkdownSideBySideView({
   workspaceRoot,
   onNavigate,
   scrollToAnchor,
-  onAnchorConsumed
+  onAnchorConsumed,
+  oldImages,
+  newImages
 }: {
   baseContent: string
   content: string
@@ -59,9 +82,16 @@ export default function MarkdownSideBySideView({
   onNavigate: (absPath: string, anchor?: string) => void
   scrollToAnchor: string | null
   onAnchorConsumed: () => void
+  oldImages: MarkdownImages
+  newImages: MarkdownImages
 }): React.JSX.Element {
-  const [oldHtml, oldRef] = usePaneHtml(baseContent, absPath)
-  const [newHtml, newRef, newHtmlForPath] = usePaneHtml(content, absPath)
+  const [oldHtml, oldRef, , oldUrls] = usePaneHtml(baseContent, absPath, workspaceRoot, oldImages)
+  const [newHtml, newRef, newHtmlForPath, newUrls] = usePaneHtml(
+    content,
+    absPath,
+    workspaceRoot,
+    newImages
+  )
   // Stable prop objects (see MarkdownView): avoid innerHTML re-assignment on re-render.
   const oldInner = useMemo(() => ({ __html: oldHtml }), [oldHtml])
   const newInner = useMemo(() => ({ __html: newHtml }), [newHtml])
@@ -169,27 +199,34 @@ export default function MarkdownSideBySideView({
   }
 
   return (
-    <div className="markdown-sidebyside">
-      <div ref={oldScrollRef} className="markdown-sidebyside-pane">
-        {/* Old-pane links are inert: this handler swallows anchor clicks (needed since a
+    <div className="markdown-sidebyside-wrap">
+      {/* The same URL in both versions counts once. */}
+      <RemoteImagesBar
+        count={newImages.allowRemote ? 0 : new Set([...oldUrls, ...newUrls]).size}
+        onLoad={newImages.onAllowRemote}
+      />
+      <div className="markdown-sidebyside">
+        <div ref={oldScrollRef} className="markdown-sidebyside-pane">
+          {/* Old-pane links are inert: this handler swallows anchor clicks (needed since a
             pan/zoom box inside a link re-enables pointer events), and the CSS
             pointer-events:none rule removes the link cursor/hover. */}
-        <div
-          ref={oldRef}
-          className="markdown-body"
-          dangerouslySetInnerHTML={oldInner}
-          onClick={(e) => {
-            if ((e.target as HTMLElement).closest('a')) e.preventDefault()
-          }}
-        />
-      </div>
-      <div ref={newScrollRef} className="markdown-sidebyside-pane markdown-sidebyside-pane-new">
-        <div
-          ref={newRef}
-          className="markdown-body"
-          onClick={onNewPaneClick}
-          dangerouslySetInnerHTML={newInner}
-        />
+          <div
+            ref={oldRef}
+            className="markdown-body"
+            dangerouslySetInnerHTML={oldInner}
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest('a')) e.preventDefault()
+            }}
+          />
+        </div>
+        <div ref={newScrollRef} className="markdown-sidebyside-pane markdown-sidebyside-pane-new">
+          <div
+            ref={newRef}
+            className="markdown-body"
+            onClick={onNewPaneClick}
+            dangerouslySetInnerHTML={newInner}
+          />
+        </div>
       </div>
     </div>
   )
