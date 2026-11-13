@@ -3,9 +3,10 @@ import { mkdtemp, mkdir, writeFile, symlink, realpath, rm } from 'fs/promises'
 import { execFileSync } from 'child_process'
 import { mkdtempSync, mkdirSync, realpathSync, writeFileSync } from 'fs'
 import { homedir, tmpdir } from 'os'
-import { join, parse } from 'path'
+import { dirname, join, parse } from 'path'
 import {
   classifyExternal,
+  findOnPath,
   resolveExternal,
   goExternalRoots,
   goWorkspaceRoots,
@@ -102,11 +103,37 @@ describe('wider allow-list (python packages, go workspace modules)', () => {
     const outside = mkdtempSync(join(tmpdir(), 'vm-or-out-'))
     mkdirSync(join(root, 'inner'))
     const roots = await outsideRoots(
-      [join(root, 'inner'), outside, outside, join(outside, 'missing'), parse(outside).root, homedir()],
+      [
+        join(root, 'inner'),
+        outside,
+        outside,
+        join(outside, 'missing'),
+        parse(outside).root,
+        homedir(),
+        dirname(root), // contains the workspace
+        dirname(homedir()) // contains home (e.g. C:\Users)
+      ],
       'python-packages',
       root
     )
     expect(roots).toEqual([{ kind: 'python-packages', dir: realpathSync(outside) }])
+  })
+
+  it('findOnPath ignores the cwd and relative PATH entries, finds absolute entries', async () => {
+    const win = process.platform === 'win32'
+    const name = win ? 'tool.exe' : 'tool'
+    const bin = mkdtempSync(join(tmpdir(), 'vm-fop-'))
+    writeFileSync(join(bin, name), '#!/bin/sh\n', { mode: 0o755 })
+    const prev = process.cwd()
+    process.chdir(bin)
+    try {
+      // the tool sits in cwd, but only '.' and a relative entry are on PATH
+      expect(await findOnPath('tool', { PATH: ['.', 'rel'].join(win ? ';' : ':') })).toBeNull()
+    } finally {
+      process.chdir(prev)
+    }
+    expect(await findOnPath('tool', { PATH: bin })).toBe(join(bin, name))
+    expect(await findOnPath('tool', {})).toBeNull()
   })
 
   it('pythonPackageRoots never throws without an interpreter', async () => {

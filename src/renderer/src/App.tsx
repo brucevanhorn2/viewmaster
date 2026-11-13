@@ -254,15 +254,24 @@ export default function App(): React.JSX.Element {
         // editor" request, same-file included — it does not skip this
         // callback for same-file jumps on its own (verified against
         // AbstractCodeEditorService.openCodeEditor, which just tries
-        // registered handlers in order). Returning `false` here for a
-        // same-file target falls through to Monaco's own default handler
-        // (StandaloneCodeEditorService's built-in one, registered before
-        // ours), which moves the cursor within the current model natively
-        // — no history entry pushed, matching the design spec's decision
-        // 5. Only a genuinely different file goes through navigateTo.
+        // registered handlers in order). A same-file target moves the
+        // cursor in place here — no history entry pushed, matching the
+        // design spec's decision 5. (It is not left to Monaco's default
+        // handler: that matches models by URI string, and on Windows our
+        // models are Uri.parse'd paths while LSP locations are Uri.file
+        // URIs, so it silently does nothing.) Only a genuinely different
+        // file goes through navigateTo.
         const sourceModel = source.getModel()
         if (sourceModel && sameFsPath(absPathOfModelUri(sourceModel.uri), resource.fsPath)) {
-          return false
+          if (selectionOrPosition && 'startLineNumber' in selectionOrPosition) {
+            source.setSelection(selectionOrPosition)
+            source.revealRangeInCenterIfOutsideViewport(selectionOrPosition)
+          } else if (selectionOrPosition) {
+            source.setPosition(selectionOrPosition)
+            source.revealPositionInCenterIfOutsideViewport(selectionOrPosition)
+          }
+          source.focus()
+          return true
         }
         const line =
           selectionOrPosition && 'lineNumber' in selectionOrPosition

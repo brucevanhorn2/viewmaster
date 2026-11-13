@@ -1,4 +1,3 @@
-import { execFile } from 'child_process'
 import { access, realpath, stat } from 'fs/promises'
 import { constants } from 'fs'
 import { createRequire } from 'module'
@@ -8,6 +7,7 @@ import {
   goExternalRoots,
   goWorkspaceRoots,
   pythonPackageRoots,
+  run,
   type ExternalRoot
 } from '../files/externalRoots'
 import { isInsideRoot } from '../files/resource'
@@ -30,15 +30,10 @@ function envGet(env: NodeJS.ProcessEnv, name: string): string | undefined {
 }
 
 function goEnvGopath(env: NodeJS.ProcessEnv): Promise<string | null> {
-  return new Promise((resolve) => {
-    try {
-      execFile('go', ['env', 'GOPATH'], { env, timeout: 10_000, windowsHide: true }, (err, out) =>
-        resolve(err ? null : out.trim() || null)
-      )
-    } catch {
-      resolve(null)
-    }
-  })
+  return run('go', ['env', 'GOPATH'], { env }).then(
+    (out) => out.trim() || null,
+    () => null
+  )
 }
 
 /** gopls on PATH, else <GOPATH>/bin/gopls. Never throws. */

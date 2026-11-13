@@ -143,6 +143,18 @@ describe('LspManager', () => {
     expect(await m.query('definition', goQ)).toEqual({ kind: 'fallback', reason: 'starting' })
   })
 
+  it('a non-loading server ResponseError is an empty answer, not "still loading"', async () => {
+    const err = Object.assign(new Error('no identifier found'), { code: -32603 })
+    const { m } = setup({ configure: (c) => (c.next = err) })
+    expect(await m.query('definition', goQ)).toEqual({ kind: 'answer', locations: [] })
+  })
+
+  it('a "no views" InternalError while loading is starting', async () => {
+    const err = Object.assign(new Error('no views'), { code: -32603 })
+    const { m } = setup({ configure: (c) => (c.next = err) })
+    expect(await m.query('definition', goQ)).toEqual({ kind: 'fallback', reason: 'starting' })
+  })
+
   it('a server error is unavailable for that query but does not replace a live client', async () => {
     const { m, clients, createClient } = setup({ configure: (c) => (c.next = new Error('boom')) })
     expect(await m.query('definition', goQ)).toEqual({ kind: 'fallback', reason: 'unavailable' })

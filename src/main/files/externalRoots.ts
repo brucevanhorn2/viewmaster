@@ -1,7 +1,8 @@
 import { execFile } from 'child_process'
-import { realpath } from 'fs/promises'
+import { access, lstat, realpath, stat } from 'fs/promises'
+import { constants } from 'fs'
 import { homedir, tmpdir } from 'os'
-import { dirname, isAbsolute, parse, resolve } from 'path'
+import { dirname, isAbsolute, join, parse, resolve } from 'path'
 import type { ExternalKind } from '../../shared/types'
 import { isInsideRoot } from './resource'
 
@@ -39,15 +40,8 @@ export async function resolveExternal(
 /** GOROOT and GOMODCACHE as allow-list roots; [] if go is missing or fails. */
 export async function goExternalRoots(env: NodeJS.ProcessEnv, cwd?: string): Promise<ExternalRoot[]> {
   try {
-    const stdout = await new Promise<string>((resolve, reject) => {
-      execFile(
-        'go',
-        ['env', '-json', 'GOROOT', 'GOMODCACHE'],
-        // From the workspace, so a go.mod toolchain pin resolves the same GOROOT gopls uses.
-        { env, cwd, timeout: 10_000, windowsHide: true },
-        (err, out) => (err ? reject(err) : resolve(out))
-      )
-    })
+    // From the workspace, so a go.mod toolchain pin resolves the same GOROOT gopls uses.
+    const stdout = await run('go', ['env', '-json', 'GOROOT', 'GOMODCACHE'], { env, cwd })
     const parsed = JSON.parse(stdout) as { GOROOT?: string; GOMODCACHE?: string }
     const roots: ExternalRoot[] = []
     for (const [key, kind] of [
@@ -68,10 +62,60 @@ export async function goExternalRoots(env: NodeJS.ProcessEnv, cwd?: string): Pro
   }
 }
 
-function run(cmd: string, args: string[], opts: { env: NodeJS.ProcessEnv; cwd?: string }): Promise<string> {
+function envGet(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const key = Object.keys(env).find((k) => k.toLowerCase() === name.toLowerCase())
+  return key ? env[key] : undefined
+}
+
+/**
+ * Absolute path of `name` found on env PATH only (never the current or `cwd` directory;
+ * on Windows also tries `name.exe`), else null. Used so a `go.exe` / `python.exe` planted
+ * in the opened folder is never run in place of the installed tool: on Windows, a bare
+ * name given to execFile is looked up in `cwd` before PATH.
+ */
+export async function findOnPath(
+  name: string,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform
+): Promise<string | null> {
+  const win = platform === 'win32'
+  const names = win && !/\.exe$/i.test(name) ? [name + '.exe', name] : [name]
+  for (const dir of (envGet(env, 'PATH') ?? '').split(win ? ';' : ':')) {
+    if (!dir || !isAbsolute(dir)) continue // a relative PATH entry would be cwd-relative
+    for (const n of names) {
+      const candidate = join(dir, n)
+      try {
+        if (win) {
+          // lstat: Windows Store app-execution aliases (python.exe) are reparse points that
+          // stat() can't follow, yet they run fine.
+          if ((await lstat(candidate)).isDirectory()) continue
+        } else {
+          if (!(await stat(candidate)).isFile()) continue
+          await access(candidate, constants.X_OK)
+        }
+        return candidate
+      } catch {
+        // not here
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Runs `cmd` (resolved via PATH unless already absolute) and resolves its stdout.
+ * Rejects when it can't be found, fails, or exceeds 10s.
+ */
+export async function run(
+  cmd: string,
+  args: string[],
+  opts: { env: NodeJS.ProcessEnv; cwd?: string }
+): Promise<string> {
+  const exe = isAbsolute(cmd) ? cmd : await findOnPath(cmd, opts.env)
+  if (!exe) throw new Error(`${cmd} not found on PATH`)
   return new Promise((res, rej) => {
     try {
-      execFile(cmd, args, { ...opts, timeout: 10_000, windowsHide: true }, (err, out) =>
+      execFile(exe, args, { ...opts, timeout: 10_000, windowsHide: true }, (err, out) =>
         err ? rej(err) : res(out)
       )
     } catch (err) {
@@ -84,8 +128,9 @@ const fold = (p: string): string => (process.platform === 'win32' ? p.toLowerCas
 
 /**
  * Realpaths `dirs` and keeps those usable as allow-list roots: existing, outside the
- * workspace (in-root files need no allowance), and never a filesystem root or the home
- * directory itself (a stray PYTHONPATH or replace entry must not open up everything).
+ * workspace (in-root files need no allowance), and never a filesystem root, the home
+ * directory, or any folder containing the workspace or the home directory (a stray
+ * PYTHONPATH or replace entry like `..` or `C:\Users` must not open up sibling projects).
  */
 export async function outsideRoots(
   dirs: string[],
@@ -93,7 +138,8 @@ export async function outsideRoots(
   workspaceRoot: string
 ): Promise<ExternalRoot[]> {
   const realRoot = await realpath(workspaceRoot).catch(() => workspaceRoot)
-  const home = await realpath(homedir()).then(fold, () => null)
+  const realHome = await realpath(homedir()).catch(() => null)
+  const home = realHome === null ? null : fold(realHome)
   const out: ExternalRoot[] = []
   const seen = new Set<string>()
   for (const d of dirs) {
@@ -104,6 +150,8 @@ export async function outsideRoots(
     seen.add(key)
     if (parse(dir).root === dir || key === home) continue
     if (isInsideRoot(dir, realRoot)) continue
+    // An ancestor of the workspace or of home is far too broad.
+    if (isInsideRoot(realRoot, dir) || (realHome !== null && isInsideRoot(realHome, dir))) continue
     out.push({ kind, dir })
   }
   return out

@@ -17,6 +17,13 @@ export const STARTING_GRACE_MS = 120_000
 
 const isResponseError = (e: unknown): boolean =>
   typeof e === 'object' && e !== null && typeof (e as { code?: unknown }).code === 'number'
+/** RequestCancelled, ContentModified, ServerCancelled, ServerNotInitialized. */
+const LOADING_CODES = new Set([-32800, -32801, -32802, -32002])
+/** A ResponseError a server sends while still loading (as opposed to a real "no answer here"). */
+const isLoadingError = (e: unknown): boolean =>
+  isResponseError(e) &&
+  (LOADING_CODES.has((e as { code: number }).code) ||
+    /no views|not (yet )?initiali[sz]ed|still loading/i.test(String((e as { message?: unknown }).message ?? '')))
 /** Replacements of a dead client before the language is given up for this folder. */
 export const MAX_RESTARTS = 3
 /** How long a "server not installed" verdict is trusted before re-checking. */
@@ -80,10 +87,16 @@ export class LspManager {
       const deadline = Date.now() + QUERY_TIMEOUT_MS
       const timer = setTimeout(() => finish(this.timeoutAnswer(instance)), QUERY_TIMEOUT_MS)
       this.run(kind, q, lang, deadline, (i) => (instance = i)).then(finish, (e) =>
-        // A server-side ResponseError (has a numeric code: ContentModified, "no views", ...) is
-        // what gopls/pyright answer while still loading, so it's treated like a timeout.
+        // Loading-type ResponseErrors (ContentModified, "no views", ...) are treated like a
+        // timeout. Any other ResponseError is the server's real answer that there is nothing
+        // at this position (e.g. gopls "no identifier found"), so it's an empty answer rather
+        // than a misleading "still loading" fallback.
         finish(
-          e instanceof LspTimeoutError || isResponseError(e) ? this.timeoutAnswer(instance) : UNAVAILABLE
+          e instanceof LspTimeoutError || isLoadingError(e)
+            ? this.timeoutAnswer(instance)
+            : isResponseError(e)
+              ? { kind: 'answer', locations: [] }
+              : UNAVAILABLE
         )
       )
     })
