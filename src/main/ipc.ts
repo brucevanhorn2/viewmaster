@@ -25,7 +25,7 @@ import { historyPaths } from './history/paths'
 import { getObject, readVersions } from './history/store'
 import { browseFiles, listFolderTree, listGitTree, toUnchangedFiles } from './files/browse'
 import { isImageMime, mimeFor, readResource, relForBase, resolveWithinRoot } from './files/resource'
-import { fetchRemoteImage } from './files/remoteImage'
+import { fetchRemoteImage, isPrivateHost } from './files/remoteImage'
 import { searchFiles } from './search/scan'
 import { looksLikeDefinition } from './search/definitionHeuristics'
 import { looksLikeImportOf } from './search/importHeuristics'
@@ -37,7 +37,21 @@ const RECOMPUTE_DEBOUNCE_MS = 300
 
 let remoteImageSessionInstance: Electron.Session | null = null
 function remoteImageSession(): Electron.Session {
-  remoteImageSessionInstance ??= electronSession.fromPartition('remote-images', { cache: false })
+  if (!remoteImageSessionInstance) {
+    const ses = electronSession.fromPartition('remote-images', { cache: false })
+    // Every request in this session, redirect hops included, is re-checked: a public URL
+    // that redirects to a LAN/loopback address is cancelled before it's sent.
+    ses.webRequest.onBeforeRequest((details, callback) => {
+      let host = ''
+      try {
+        host = new URL(details.url).hostname
+      } catch {
+        // unparseable: cancel below
+      }
+      callback({ cancel: !host || isPrivateHost(host) })
+    })
+    remoteImageSessionInstance = ses
+  }
   return remoteImageSessionInstance
 }
 

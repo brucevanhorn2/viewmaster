@@ -270,3 +270,23 @@ describe('cachedReader retryFailures', () => {
     expect(read).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('read concurrency', () => {
+  it('keeps at most 6 image reads in flight', async () => {
+    let active = 0
+    let peak = 0
+    const { opts } = setup({
+      readLocal: async () => {
+        active++
+        peak = Math.max(peak, active)
+        await new Promise((r) => setTimeout(r, 5))
+        active--
+        return OK
+      }
+    })
+    const html = Array.from({ length: 20 }, (_, i) => `<img src="i${i}.png">`).join('')
+    const out = await resolveMarkdownImages(html, opts)
+    expect(peak).toBe(6)
+    expect(dom(out.html).querySelectorAll('img[src^="data:"]')).toHaveLength(20)
+  })
+})

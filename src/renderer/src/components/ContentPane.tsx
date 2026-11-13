@@ -199,10 +199,13 @@ export default function ContentPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [absPathKey, docText]
   )
+  // The baseline key names a ref (HEAD, a branch), not a commit, so a commit or checkout can
+  // move it without changing the doc text; refreshKey keeps baseline images in step. This
+  // reader is only used by the baseline side of side-by-side.
   const baselineReader = useMemo(
     () => cachedReader((p: string) => window.viewmaster.readBaseResource(p)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [absPathKey, docText, baselineKey]
+    [absPathKey, docText, baselineKey, refreshKey]
   )
   // Remote cache survives an on-disk refresh of the same file (keyed on absPath only).
   // Failures aren't kept, so a re-render after a network blip tries again.

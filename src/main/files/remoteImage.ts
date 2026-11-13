@@ -37,42 +37,81 @@ export async function fetchRemoteImage(
 
 /**
  * True for hosts a document's image URL must not reach: localhost names and IP literals in
- * loopback, private, link-local, CGNAT or unspecified ranges (IPv4, IPv6 and IPv4-mapped).
- * Stops a doc from making the user's machine GET routers or local services. A public name
- * that resolves to a private address isn't caught here.
+ * loopback, private, link-local, CGNAT, multicast/broadcast or unspecified ranges. IPv6
+ * literals are expanded, and IPv4 embedded in them (mapped, compatible, NAT64, 6to4) is
+ * checked too. Stops a doc from making the user's machine GET routers or local services.
+ * The remote-images session re-checks every request (redirects included) with this.
  */
 export function isPrivateHost(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
   if (h === 'localhost' || h.endsWith('.localhost')) return true
-  const v4 = (s: string): number[] | null => {
-    const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s)
-    return m ? m.slice(1).map(Number) : null
-  }
-  const privateV4 = ([a, b]: number[]): boolean =>
+  const ip4 = parseV4(h)
+  if (ip4) return privateV4(ip4)
+  if (!h.includes(':')) return false
+  const g = parseV6(h)
+  if (!g) return true // unparseable literal: refuse rather than guess
+  const fromGroups = (hi: number, lo: number): number[] => [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff]
+  if (g.slice(0, 7).every((x) => x === 0) && g[7] <= 1) return true // :: and ::1
+  if (g.slice(0, 6).every((x) => x === 0)) return privateV4(fromGroups(g[6], g[7])) // ::a.b.c.d
+  if (g.slice(0, 5).every((x) => x === 0) && g[5] === 0xffff) return privateV4(fromGroups(g[6], g[7]))
+  if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0))
+    return privateV4(fromGroups(g[6], g[7])) // NAT64
+  if (g[0] === 0x2002) return privateV4(fromGroups(g[1], g[2])) // 6to4
+  return (
+    (g[0] & 0xfe00) === 0xfc00 || // unique local
+    (g[0] & 0xffc0) === 0xfe80 || // link-local
+    (g[0] & 0xff00) === 0xff00 // multicast
+  )
+}
+
+function parseV4(s: string): number[] | null {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s)
+  if (!m) return null
+  const n = m.slice(1).map(Number)
+  return n.every((x) => x <= 255) ? n : null
+}
+
+function privateV4([a, b]: number[]): boolean {
+  return (
     a === 0 ||
     a === 10 ||
     a === 127 ||
+    a >= 224 || // multicast, reserved, broadcast
     (a === 100 && b >= 64 && b <= 127) ||
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168)
-  const ip4 = v4(h)
-  if (ip4) return privateV4(ip4)
-  if (!h.includes(':')) return false
-  if (h === '::' || h === '::1') return true
-  const mapped = /^::ffff:(.+)$/.exec(h)
-  if (mapped) {
-    const inner = v4(mapped[1])
-    if (inner) return privateV4(inner)
-    // Hex form (::ffff:7f00:1): URL() normalizes mapped addresses to this.
-    const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(mapped[1])
-    if (hex) {
-      const hi = parseInt(hex[1], 16)
-      return privateV4([hi >> 8, hi & 0xff])
-    }
-    return true
+  )
+}
+
+/** Expands an IPv6 literal (optionally ending in dotted IPv4) to 8 groups; null if malformed. */
+function parseV6(s: string): number[] | null {
+  let tail: number[] = []
+  const dotted = /^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s)
+  if (dotted) {
+    const v4 = parseV4(dotted[2])
+    if (!v4) return null
+    tail = [(v4[0] << 8) | v4[1], (v4[2] << 8) | v4[3]]
+    s = dotted[1].endsWith('::') ? dotted[1] : dotted[1].slice(0, -1)
   }
-  return /^f[cd][0-9a-f]{0,2}:/.test(h) || /^fe[89ab][0-9a-f]?:/.test(h)
+  const parts = s.split('::')
+  if (parts.length > 2) return null
+  const conv = (x: string): number[] | null => {
+    if (x === '') return []
+    const out: number[] = []
+    for (const p of x.split(':')) {
+      if (!/^[0-9a-f]{1,4}$/.test(p)) return null
+      out.push(parseInt(p, 16))
+    }
+    return out
+  }
+  const head = conv(parts[0])
+  const rest = parts.length === 2 ? conv(parts[1]) : []
+  if (!head || !rest) return null
+  const known = head.length + rest.length + tail.length
+  if (parts.length === 1) return known === 8 ? [...head, ...tail] : null
+  if (known > 7) return null
+  return [...head, ...new Array(8 - known).fill(0), ...rest, ...tail]
 }
 
 /** Reads a response body, cancelling and returning null once it exceeds `max` bytes. */

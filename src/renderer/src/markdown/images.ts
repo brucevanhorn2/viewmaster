@@ -92,6 +92,24 @@ function resolveLocalPath(src: string, opts: ImageResolveOptions): string | null
   return ABSOLUTE.test(joined) ? joined : null
 }
 
+/** Image reads in flight at once per document (each can be up to 10 MB over IPC). */
+const MAX_CONCURRENT_READS = 6
+
+function limiter(max: number): <T>(task: () => Promise<T>) => Promise<T> {
+  let active = 0
+  const waiting: (() => void)[] = []
+  return async (task) => {
+    if (active >= max) await new Promise<void>((r) => waiting.push(r))
+    active++
+    try {
+      return await task()
+    } finally {
+      active--
+      waiting.shift()?.()
+    }
+  }
+}
+
 async function safeRead<K>(read: (k: K) => Promise<ImageData>, key: K): Promise<ImageData> {
   try {
     const r = await read(key)
@@ -111,6 +129,7 @@ export async function resolveMarkdownImages(
   doc.querySelectorAll('source').forEach((s) => s.removeAttribute('srcset'))
 
   const jobs: Promise<void>[] = []
+  const limit = limiter(MAX_CONCURRENT_READS)
   doc.querySelectorAll('img').forEach((img) => {
     if (img.closest('pre.mermaid')) return
     img.removeAttribute('srcset')
@@ -134,7 +153,7 @@ export async function resolveMarkdownImages(
         pending(true)
         return
       }
-      jobs.push(safeRead(opts.readRemote, src).then((r) => (r ? succeed(r) : fail(true))))
+      jobs.push(limit(() => safeRead(opts.readRemote, src)).then((r) => (r ? succeed(r) : fail(true))))
       return
     }
     if (SCHEME.test(src) || src.startsWith('//') || src === '') {
@@ -150,7 +169,7 @@ export async function resolveMarkdownImages(
       pending(false)
       return
     }
-    jobs.push(safeRead(opts.readLocal, abs).then((r) => (r ? succeed(r) : fail(false))))
+    jobs.push(limit(() => safeRead(opts.readLocal, abs)).then((r) => (r ? succeed(r) : fail(false))))
   })
 
   await Promise.all(jobs)
