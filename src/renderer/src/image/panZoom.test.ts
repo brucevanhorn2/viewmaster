@@ -153,6 +153,12 @@ describe('attachPanZoom', () => {
     expect(content.style.width).toBe('')
   })
 
+  it('ctrl+wheel never falls through to window zoom when there is nothing to zoom', () => {
+    attach({ natural: { width: 0, height: 0 } })
+    expect(wheel({ deltaY: -100, ctrlKey: true }).defaultPrevented).toBe(true)
+    expect(wheel({ deltaY: -100 }).defaultPrevented).toBe(false)
+  })
+
   it('destroy restores original markup and stops handling events', () => {
     content.setAttribute('style', 'max-width: 300px')
     viewport.innerHTML = '<div style="max-width: 300px" id="c"></div>'

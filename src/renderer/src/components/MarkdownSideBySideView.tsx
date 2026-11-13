@@ -171,10 +171,17 @@ export default function MarkdownSideBySideView({
   return (
     <div className="markdown-sidebyside">
       <div ref={oldScrollRef} className="markdown-sidebyside-pane">
-        {/* No onClick handler here -- this omission is the actual enforcement that
-            old-pane links are inert; the CSS pointer-events:none rule is only for
-            visual affordance (no cursor/hover), not the mechanism itself. */}
-        <div ref={oldRef} className="markdown-body" dangerouslySetInnerHTML={oldInner} />
+        {/* Old-pane links are inert: this handler swallows anchor clicks (needed since a
+            pan/zoom box inside a link re-enables pointer events), and the CSS
+            pointer-events:none rule removes the link cursor/hover. */}
+        <div
+          ref={oldRef}
+          className="markdown-body"
+          dangerouslySetInnerHTML={oldInner}
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest('a')) e.preventDefault()
+          }}
+        />
       </div>
       <div ref={newScrollRef} className="markdown-sidebyside-pane markdown-sidebyside-pane-new">
         <div

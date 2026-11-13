@@ -47,6 +47,9 @@ describe('ImageView', () => {
 
     // New src: load may fire before passive effect cleanups, so flush nothing between.
     act(() => root!.render(createElement(ImageView, { src: 'data:b', resetKey: 'f' })))
+    // Still zoomed while the new src decodes: no flash back to the plain look.
+    expect(view.classList.contains('pz-viewport')).toBe(true)
+    expect((host.querySelector('img') as HTMLImageElement).style.width).toBe(zoomed)
     act(() => {
       host.querySelector('img')!.dispatchEvent(new Event('load'))
     })

@@ -7,7 +7,7 @@ type SavedStates = ReturnType<DocumentPanZoom['states']>
 
 /**
  * Runs mermaid over the container's rendered markdown, then attaches map-style
- * pan/zoom to its diagrams and images. Re-runs whenever `html` changes.
+ * pan/zoom to its diagrams and images. Re-runs whenever `html` or `pathKey` changes.
  *
  * Zoom state survives a reload of the SAME document (same pathKey) and resets
  * to Fit for a different one: states are captured from the previous instance
@@ -52,5 +52,6 @@ export function useDocumentPanZoom(
         current.current = null
       }
     }
-  }, [ref, html])
+    // pathKey too: two documents with identical HTML must not share zoom.
+  }, [ref, html, pathKey])
 }

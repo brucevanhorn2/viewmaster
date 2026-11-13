@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Placeholder from './Placeholder'
-import { attachPanZoom, type PanZoomController } from '../image/panZoom'
+import { attachPanZoom, imageSize, type PanZoomController } from '../image/panZoom'
 import type { PanZoomState } from '../image/panZoomMath'
 
 export default function ImageView({
@@ -27,10 +27,11 @@ export default function ImageView({
     ctrlRef.current = null
   }, [])
 
-  // Layout-effect cleanup runs synchronously in the commit, before the new src can fire load;
-  // a passive cleanup could run late and destroy a controller attached for the new src.
-  // Keyed on resetKey too: two files with identical bytes share a src but must not share zoom.
-  useLayoutEffect(() => detach, [src, resetKey, detach])
+  // A new file remounts the <img> (key=resetKey), so its controller is detached here, in a
+  // layout-effect cleanup that runs synchronously in the commit, before the new img can fire
+  // load. A reload of the same file (new src, same key) keeps the controller attached until
+  // onLoad swaps it, so the image doesn't flash back to the plain look while decoding.
+  useLayoutEffect(() => detach, [resetKey, detach])
 
   useEffect(() => {
     setFailed(false)
@@ -41,11 +42,7 @@ export default function ImageView({
     const img = imgRef.current
     if (!viewport || !img) return
     detach()
-    let natural = { width: img.naturalWidth, height: img.naturalHeight }
-    if (!natural.width || !natural.height) {
-      const r = img.getBoundingClientRect()
-      natural = { width: r.width, height: r.height }
-    }
+    const natural = imageSize(img)
     if (!natural.width || !natural.height) return // cannot attach: keep the plain look
     const key = resetKeyRef.current
     const saved = savedRef.current

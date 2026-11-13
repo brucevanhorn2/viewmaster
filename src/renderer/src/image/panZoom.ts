@@ -106,7 +106,10 @@ export function attachPanZoom(
   }
 
   const onWheel = (e: WheelEvent): void => {
-    if (!fit) return
+    if (!fit) {
+      if (e.ctrlKey) e.preventDefault() // never let Ctrl+wheel fall through to window zoom
+      return
+    }
     if (e.ctrlKey) {
       e.preventDefault()
       const r = viewport.getBoundingClientRect()
@@ -211,4 +214,13 @@ export function attachPanZoom(
   }
   layout(opts.initial)
   return api
+}
+
+/** An image's intrinsic size; the rendered size stands in for an SVG with none (naturalWidth 0). */
+export function imageSize(img: HTMLImageElement): { width: number; height: number } {
+  if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+    return { width: img.naturalWidth, height: img.naturalHeight }
+  }
+  const r = img.getBoundingClientRect()
+  return { width: r.width, height: r.height }
 }

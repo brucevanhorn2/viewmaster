@@ -44,7 +44,8 @@ describe('attachDocumentPanZoom', () => {
     expect(w.querySelector('svg')).not.toBeNull()
     expect(w.querySelector('.pz-controls')).not.toBeNull()
     expect(w.style.width).toBe('400px')
-    expect(w.style.height).toBe('200px')
+    expect(w.style.aspectRatio).toBe('400 / 200')
+    expect(w.style.height).toBe('')
     d.destroy()
   })
 
@@ -220,5 +221,41 @@ describe('review fixes', () => {
     const d = attachDocumentPanZoom(container, [{ zoom: 20, x: 0, y: 0 }])
     expect(d.states()[0]?.zoom).toBe(20)
     d.destroy()
+  })
+})
+
+describe('round 3 fixes', () => {
+  it('skips boxes rendered too narrow for the controls, even for big images', () => {
+    const img = document.createElement('img')
+    loaded(img, 2000, 2000)
+    stubSize(img, 80, 80)
+    container.append(img)
+    attachDocumentPanZoom(container, null)
+    expect(container.querySelector('.pz-doc')).toBeNull()
+  })
+
+  it('keeps the rendered aspect of an image stretched by width/height attributes', () => {
+    const img = document.createElement('img')
+    loaded(img, 800, 800)
+    img.setAttribute('width', '400')
+    img.setAttribute('height', '100')
+    stubSize(img, 400, 100)
+    container.append(img)
+    attachDocumentPanZoom(container, null)
+    const w = img.parentElement as HTMLElement
+    expect(w.style.width).toBe('400px')
+    expect(w.style.aspectRatio).toBe('400 / 100')
+    expect(img.style.width).toBe('400px')
+    expect(img.style.height).toBe('100px')
+  })
+
+  it("a squeezed diagram's box prefers mermaid's max-width so it can grow back", () => {
+    const pre = mermaidNode(400, 200)
+    ;(pre.firstChild as SVGElement).style.maxWidth = '900px'
+    container.append(pre)
+    attachDocumentPanZoom(container, null)
+    const w = container.querySelector('.pz-doc') as HTMLElement
+    expect(w.style.width).toBe('900px')
+    expect(w.style.aspectRatio).toBe('400 / 200')
   })
 })

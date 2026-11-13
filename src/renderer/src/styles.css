@@ -505,6 +505,13 @@ body {
   cursor: pointer;
 }
 
+/* A linked diagram/image in the old pane must still pan and zoom (the link stays inert:
+   the old pane's click handler swallows anchor clicks). */
+.markdown-sidebyside-pane:not(.markdown-sidebyside-pane-new) .markdown-body a .pz-doc {
+  pointer-events: auto;
+  cursor: grab;
+}
+
 /* ---- rendered html ---- */
 
 .html-scroll {
@@ -1023,7 +1030,8 @@ body {
   pointer-events: auto;
 }
 
-/* Pan/zoom box around a diagram/image in rendered markdown: fixed natural size, no layout jump. */
+/* Pan/zoom box around a diagram/image in rendered markdown: the element's size and aspect at
+   attach time (no layout jump), shrinking/growing with the pane up to its preferred width. */
 .pz-doc {
   display: block;
   max-width: 100%;
