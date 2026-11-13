@@ -1,4 +1,4 @@
-// REPL driver for View Master (Electron). Run under xvfb on headless Linux.
+// REPL driver for Second Look (Electron). Run under xvfb on headless Linux.
 // Designed for agents: wrap in tmux, send-keys commands, capture-pane output.
 //
 // Paths are relative to the repo root (viewmaster/), same as everywhere
@@ -56,7 +56,7 @@ const COMMANDS = {
   },
 
   // Text search over interactive elements only (button, a, [role=button]).
-  // View Master's sidebar file/dir rows are plain divs — use `click-row`
+  // Second Look's sidebar file/dir rows are plain divs — use `click-row`
   // for those instead (see Gotchas in SKILL.md).
   async 'click-text'(text) {
     if (!page) return console.log('ERROR: launch first')
@@ -122,14 +122,14 @@ const COMMANDS = {
     for (const w of app.windows()) console.log(' ', w.url())
   },
 
-  // View Master has no native-dialog automation under xvfb (there's no
+  // Second Look has no native-dialog automation under xvfb (there's no
   // reliable way to drive the OS file picker headlessly), so this reaches
   // into the app's own exposed preload API to open a folder directly — the
   // exact same repo:open IPC call a real "Open Folder…" pick or Recent-item
   // click triggers. Returns the raw RepoState the main process computed.
   async 'open-path'(dir) {
     if (!page) return console.log('ERROR: launch first')
-    const r = await page.evaluate(async (d) => window.viewmaster.openRepo(d), dir)
+    const r = await page.evaluate(async (d) => window.secondLook.openRepo(d), dir)
     console.log('open-path', dir, '→', JSON.stringify(r).slice(0, 500))
   },
 
@@ -199,5 +199,5 @@ rl.on('close', async () => {
   process.exit(0)
 })
 
-console.log('viewmaster driver — "help" for commands, "launch" to start')
+console.log('second-look driver — "help" for commands, "launch" to start')
 rl.prompt()

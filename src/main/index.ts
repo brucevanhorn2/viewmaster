@@ -238,13 +238,13 @@ function createWindow(): BrowserWindow {
     if (url !== win.webContents.getURL()) event.preventDefault()
   })
 
-  // Auto-open a folder on launch: VIEWMASTER_OPEN (dev/testing convenience)
-  // or a CLI path argument (e.g. `viewmaster /some/path`, or an LLM telling
+  // Auto-open a folder on launch: SECONDLOOK_OPEN (dev/testing convenience)
+  // or a CLI path argument (e.g. `second-look /some/path`, or an LLM telling
   // itself to open its own working folder) -- both funnel through the same
   // sendOpenFolder path the "Open Recent" menu already uses, so an invalid
   // path gets the same existing error-state handling openRepo already has,
   // no new validation needed here.
-  const autoOpen = process.env['VIEWMASTER_OPEN'] ?? getPathArgFromArgv(process.argv, app.isPackaged)
+  const autoOpen = process.env['SECONDLOOK_OPEN'] ?? getPathArgFromArgv(process.argv, app.isPackaged)
   if (autoOpen) {
     win.webContents.on('did-finish-load', () => sendOpenFolder(autoOpen))
   }

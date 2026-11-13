@@ -226,7 +226,7 @@ export default function Sidebar({
     if (state.kind !== 'repo') return
     setBaselineInput(state.baseline.kind === 'custom' ? state.baseline.ref : '')
     setEditingBaseline(true)
-    void window.viewmaster.listRefs().then(setRefSuggestions)
+    void window.secondLook.listRefs().then(setRefSuggestions)
   }
 
   const commitBaseline = (ref: string): void => {
@@ -343,7 +343,7 @@ export default function Sidebar({
             <div
               className="context-menu-item"
               onClick={() => {
-                window.viewmaster.copyPath(menu.absPath)
+                window.secondLook.copyPath(menu.absPath)
                 setMenu(null)
               }}
             >
@@ -353,7 +353,7 @@ export default function Sidebar({
           <div
             className="context-menu-item"
             onClick={() => {
-              window.viewmaster.showInFolder(menu.absPath)
+              window.secondLook.showInFolder(menu.absPath)
               setMenu(null)
             }}
           >

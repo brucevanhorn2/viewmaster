@@ -12,7 +12,7 @@ export interface TestRepo {
 
 /** Create a throwaway git repo in a temp dir (default branch: main). Test-only. */
 export async function makeRepo(): Promise<TestRepo> {
-  const root = await mkdtemp(join(tmpdir(), 'viewmaster-repo-'))
+  const root = await mkdtemp(join(tmpdir(), 'secondlook-repo-'))
   const git = (...args: string[]): Promise<GitResult> => runGit(root, args)
   // runGit never rejects on a nonzero exit; a broken fixture repo must fail here, not later.
   const setup = async (...args: string[]): Promise<void> => {

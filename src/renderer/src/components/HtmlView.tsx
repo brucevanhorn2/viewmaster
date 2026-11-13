@@ -32,7 +32,7 @@ export default function HtmlView({
       e.preventDefault()
       const current = propsRef.current
       const classification = classifyLinkHref(href, current.absPath, current.workspaceRoot)
-      if (classification.kind === 'external') window.viewmaster.openExternal(classification.url)
+      if (classification.kind === 'external') window.secondLook.openExternal(classification.url)
       else if (classification.kind === 'navigate') current.onNavigate(classification.absPath)
     }
 
@@ -48,7 +48,7 @@ export default function HtmlView({
     let stale = false
 
     void (async () => {
-      const resolved = await resolveResources(content, absPath, window.viewmaster.readResource)
+      const resolved = await resolveResources(content, absPath, window.secondLook.readResource)
       const sanitized = sanitizeHtmlDocument(resolved)
       if (!stale && host.shadowRoot) host.shadowRoot.innerHTML = sanitized
     })()

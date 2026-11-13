@@ -9,7 +9,7 @@ import type { BaselineKind } from '@shared/types'
 let dir: string
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'viewmaster-folder-'))
+  dir = await mkdtemp(join(tmpdir(), 'secondlook-folder-'))
 })
 
 afterEach(async () => {

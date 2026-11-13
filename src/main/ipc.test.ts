@@ -17,7 +17,7 @@ const handlers = vi.hoisted(() => new Map<string, (...args: any[]) => any>())
 // at module load time. There's no Electron process running in the test
 // runner, so 'electron' is stubbed here with just enough surface for
 // openRepo() and its dependencies (electron-store) to run.
-const userDataDir = join(tmpdir(), 'viewmaster-ipc-test-userdata')
+const userDataDir = join(tmpdir(), 'secondlook-ipc-test-userdata')
 mkdirSync(userDataDir, { recursive: true })
 
 vi.mock('electron', () => ({
@@ -187,7 +187,7 @@ describe('openRepo error propagation', () => {
     // rejection between runGit and the repo:open IPC handler, so it
     // propagated as an unhandled promise rejection instead of the
     // structured RepoState the rest of the app expects.
-    const missingRoot = join(tmpdir(), 'viewmaster-ipc-test-does-not-exist')
+    const missingRoot = join(tmpdir(), 'secondlook-ipc-test-does-not-exist')
     const state = await openRepo(noopGetWindow, missingRoot)
     expect(state.kind).toBe('error')
     if (state.kind === 'error') {
@@ -197,7 +197,7 @@ describe('openRepo error propagation', () => {
   })
 })
 
-const missingRoot = join(tmpdir(), 'viewmaster-ipc-test-does-not-exist')
+const missingRoot = join(tmpdir(), 'secondlook-ipc-test-does-not-exist')
 
 describe('LSP wiring', () => {
   // Plain (non-git) temp folders: folder-mode sessions keep the root exactly

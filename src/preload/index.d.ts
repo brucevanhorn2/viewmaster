@@ -1,8 +1,8 @@
-import type { ViewmasterApi } from './index'
+import type { SecondLookApi } from './index'
 
 declare global {
   interface Window {
-    viewmaster: ViewmasterApi
+    secondLook: SecondLookApi
   }
 }
 

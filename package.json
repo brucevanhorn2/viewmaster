@@ -1,6 +1,6 @@
 {
-  "name": "viewmaster",
-  "productName": "View Master",
+  "name": "second-look",
+  "productName": "Second Look",
   "version": "0.7.0",
   "description": "Read-only desktop viewer for markdown, images, PDFs, and branch diffs",
   "main": "./out/main/index.js",

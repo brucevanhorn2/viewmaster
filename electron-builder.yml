@@ -1,5 +1,5 @@
-appId: com.vanhorn.viewmaster
-productName: View Master
+appId: com.vanhorn.secondlook
+productName: Second Look
 directories:
   output: release
   buildResources: resources

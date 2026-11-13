@@ -46,7 +46,7 @@ export function createRecorder(root: string, options: RecorderOptions): Recorder
   let chain: Promise<void> = Promise.resolve()
   const enqueue = (fn: () => Promise<void>): Promise<void> => {
     chain = chain.then(fn).catch((err) => {
-      console.error('[viewmaster:history] recorder task failed:', err)
+      console.error('[secondlook:history] recorder task failed:', err)
     })
     return chain
   }

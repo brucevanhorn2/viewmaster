@@ -1,9 +1,9 @@
 ---
 name: run-viewmaster
-description: Build, run, and drive the View Master Electron desktop app. Use when asked to start viewmaster, launch the app, take a screenshot of it, or interact with its UI (open a folder, toggle Changed/Browse, click a file, view a diff).
+description: Build, run, and drive the Second Look Electron desktop app. Use when asked to start viewmaster, launch the app, take a screenshot of it, or interact with its UI (open a folder, toggle Changed/Browse, click a file, view a diff).
 ---
 
-View Master is an Electron desktop app (read-only viewer for markdown documents and git branch diffs). Drive it via the Playwright `_electron` REPL at `.claude/skills/run-viewmaster/driver.mjs`, run under `xvfb-run` since this container has no display. Launch takes ~3s; the interesting flows (opening a folder, the Changed/Browse toggle, viewing a file) all go through the driver's commands below.
+Second Look is an Electron desktop app (read-only viewer for markdown documents and git branch diffs). Drive it via the Playwright `_electron` REPL at `.claude/skills/run-viewmaster/driver.mjs`, run under `xvfb-run` since this container has no display. Launch takes ~3s; the interesting flows (opening a folder, the Changed/Browse toggle, viewing a file) all go through the driver's commands below.
 
 All paths are relative to the repo root.
 
@@ -73,7 +73,7 @@ Screenshots land in `/tmp/shots/` (override with `SCREENSHOT_DIR`).
 
 There's no native-dialog automation under xvfb, so don't try to click
 "Open Folder…" — use `open-path` instead, which calls the app's own
-`window.viewmaster.openRepo(path)` preload API directly (the same IPC call
+`window.secondLook.openRepo(path)` preload API directly (the same IPC call
 a real folder pick or a Recent-list click triggers):
 
 ```

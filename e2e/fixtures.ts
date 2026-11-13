@@ -63,13 +63,13 @@ export const test = base.extend<{
     // (recent folders, window bounds, per-folder sidebar mode) from
     // colliding with a developer's real app data or with another test's
     // Electron instance running at the same time.
-    const userDataDir = await mkdtemp(join(tmpdir(), 'viewmaster-e2e-userdata-'))
+    const userDataDir = await mkdtemp(join(tmpdir(), 'secondlook-e2e-userdata-'))
     try {
             const env: Record<string, string> = {}
       for (const [k, v] of Object.entries(process.env)) {
         if (v !== undefined && !STRIPPED_ENV.has(k)) env[k] = v
       }
-      env.VIEWMASTER_OPEN = tmpRepo.root
+      env.SECONDLOOK_OPEN = tmpRepo.root
       const app = await electron.launch({
         executablePath: electronBinaryPath as unknown as string,
         args: [

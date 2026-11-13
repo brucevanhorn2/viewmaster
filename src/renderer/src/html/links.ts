@@ -8,7 +8,7 @@ export type LinkClassification =
 /**
  * Classifies a clicked <a>/<area> href for HtmlView's click handler:
  * http(s) links open externally, in-workspace relative links navigate
- * View Master to that file, everything else (anchors, mailto:, links that
+ * Second Look to that file, everything else (anchors, mailto:, links that
  * escape the workspace root) is inert.
  */
 export function classifyLinkHref(

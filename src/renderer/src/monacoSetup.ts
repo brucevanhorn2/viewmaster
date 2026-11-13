@@ -110,7 +110,7 @@ monaco.languages.registerDefinitionProvider(heuristicLanguageIds, {
   async provideDefinition(model, position) {
     const word = wordUnderCursor(model, position)
     if (!word) return []
-    const result = await window.viewmaster.findDefinitions(symbolQuery(model, position, word))
+    const result = await window.secondLook.findDefinitions(symbolQuery(model, position, word))
     reportResult(result)
     return toMonacoLocations(result.locations)
   }
@@ -120,7 +120,7 @@ monaco.languages.registerReferenceProvider(heuristicLanguageIds, {
   async provideReferences(model, position) {
     const word = wordUnderCursor(model, position)
     if (!word) return []
-    const result = await window.viewmaster.findReferences(symbolQuery(model, position, word))
+    const result = await window.secondLook.findReferences(symbolQuery(model, position, word))
     reportResult(result)
     return toMonacoLocations(result.locations)
   }

@@ -76,10 +76,10 @@ export default function RelatedFilesPane({
         // than serializing an extra IPC round-trip. Skipped entirely for
         // Go (see design spec decision 5).
         const importedByPromise = supportsImportEdges(currentLanguage)
-          ? window.viewmaster.findImportedBy(stripExtension(fileName))
+          ? window.secondLook.findImportedBy(stripExtension(fileName))
           : null
 
-        const content = await window.viewmaster.readFile(file.absPath)
+        const content = await window.secondLook.readFile(file.absPath)
 
         if (importedByPromise) {
           const result = await importedByPromise
@@ -106,7 +106,7 @@ export default function RelatedFilesPane({
             specifiers.map(async (specifier) => {
               for (const candidate of candidateImportPathsForLanguage(currentLanguage, fromDir, specifier)) {
                 if (cancelled) return null
-                const result = await window.viewmaster.readFile(candidate)
+                const result = await window.secondLook.readFile(candidate)
                 if (result.kind === 'text') {
                   return isInsideWorkspace(candidate, workspaceRoot)
                     ? { path: toRelativePath(candidate, workspaceRoot), absPath: candidate }
@@ -124,7 +124,7 @@ export default function RelatedFilesPane({
         // name (that fan-out self-aborts: symbol:references is single-flight).
         const names = extractDeclaredNames(content.content)
         if (names.length > 0) {
-          const result = await window.viewmaster.findRelatedReferences(names)
+          const result = await window.secondLook.findRelatedReferences(names)
           if (result.error) throw new Error(result.error)
           if (!cancelled) {
             setReferences(aggregateReferences([result.locations], file.absPath))

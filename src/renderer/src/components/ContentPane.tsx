@@ -82,7 +82,7 @@ export default function ContentPane({
     const abs = file?.absPath
     if (!abs || !workspaceRoot || relativeToRoot(abs, workspaceRoot) !== null) return
     let stale = false
-    void window.viewmaster.externalKind(abs).then((k) => {
+    void window.secondLook.externalKind(abs).then((k) => {
       if (!stale) setExtKind(k)
     })
     return () => {
@@ -151,7 +151,7 @@ export default function ContentPane({
   useEffect(() => {
     if (!file) return
     let stale = false
-    void window.viewmaster.readFile(file.absPath).then((c) => {
+    void window.secondLook.readFile(file.absPath).then((c) => {
       if (!stale) setContent(c)
     })
     return () => {
@@ -170,12 +170,12 @@ export default function ContentPane({
     if (!file || (mode !== 'diff' && mode !== 'marks' && mode !== 'sideBySideRendered')) return
     let stale = false
     const resolve = async (ref: RevisionRef): Promise<string> => {
-      if (ref === 'baseline') return window.viewmaster.readBaseFile(file.path)
+      if (ref === 'baseline') return window.secondLook.readBaseFile(file.path)
       if (ref === 'now') {
-        const c = await window.viewmaster.readFile(file.absPath)
+        const c = await window.secondLook.readFile(file.absPath)
         return c.kind === 'text' ? c.content : ''
       }
-      return window.viewmaster.historyRead(ref.sha)
+      return window.secondLook.historyRead(ref.sha)
     }
     void resolve(selection.base).then((b) => {
       if (!stale) setBaseContent(b)
@@ -195,7 +195,7 @@ export default function ContentPane({
   const absPathKey = file?.absPath ?? null
   const docText = content?.kind === 'text' ? content.content : null
   const diskReader = useMemo(
-    () => cachedReader((p: string) => window.viewmaster.readResource(p)),
+    () => cachedReader((p: string) => window.secondLook.readResource(p)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [absPathKey, docText]
   )
@@ -203,7 +203,7 @@ export default function ContentPane({
   // move it without changing the doc text; refreshKey keeps baseline images in step. This
   // reader is only used by the baseline side of side-by-side.
   const baselineReader = useMemo(
-    () => cachedReader((p: string) => window.viewmaster.readBaseResource(p)),
+    () => cachedReader((p: string) => window.secondLook.readBaseResource(p)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [absPathKey, docText, baselineKey, refreshKey]
   )
@@ -211,7 +211,7 @@ export default function ContentPane({
   // Failures aren't kept, so a re-render after a network blip tries again.
   const remoteReader = useMemo(
     () =>
-      cachedReader((u: string) => window.viewmaster.fetchRemoteImage(u), { retryFailures: true }),
+      cachedReader((u: string) => window.secondLook.fetchRemoteImage(u), { retryFailures: true }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [absPathKey]
   )
@@ -449,7 +449,7 @@ export default function ContentPane({
               </span>
               <button
                 className="toolbar-button"
-                onClick={() => window.viewmaster.openInBrowser(file.absPath)}
+                onClick={() => window.secondLook.openInBrowser(file.absPath)}
               >
                 Open in Default Browser
               </button>

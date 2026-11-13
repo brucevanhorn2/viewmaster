@@ -74,6 +74,6 @@ const api = {
     ipcRenderer.invoke('related:references', names)
 }
 
-export type ViewmasterApi = typeof api
+export type SecondLookApi = typeof api
 
-contextBridge.exposeInMainWorld('viewmaster', api)
+contextBridge.exposeInMainWorld('secondLook', api)

@@ -93,7 +93,7 @@ export default function CodeView({
             touchModel(uri, MODEL_CAP)
             return
           }
-          const result = await window.viewmaster.readFile(candidate)
+          const result = await window.secondLook.readFile(candidate)
           if (cancelled || result.kind !== 'text') continue
           if (!monaco.editor.getModel(uri)) {
             monaco.editor.createModel(result.content, languageForFile(candidate), uri)

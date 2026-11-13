@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="img/viewmaster.png" alt="View Master" width="320">
+  <img src="img/second-look.png" alt="Second Look" width="320">
 </p>
 
 A read-only desktop viewer for **markdown documents**, **images and PDFs**, and
 **branch diffs**.
 
 Built to replace reaching for a full IDE just to read a rendered markdown file,
-preview an image or PDF, or eyeball what changed on a branch. View Master only
+preview an image or PDF, or eyeball what changed on a branch. Second Look only
 ever *views* — it never edits your files.
 
 ## Features
@@ -104,7 +104,7 @@ npm run dist:win       # build a Windows .exe
 The DMG is currently **unsigned** (no signing keys yet), so macOS Gatekeeper will
 refuse to open it on first launch. To run it:
 
-1. Move `View Master.app` to `/Applications` (optional).
+1. Move `Second Look.app` to `/Applications` (optional).
 2. **Right-click the app → Open**, then confirm in the dialog.
 
 This is a one-time step per machine. Signing and notarization are on the roadmap.
