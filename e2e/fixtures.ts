@@ -42,10 +42,23 @@ export const test = base.extend<{
     // Electron instance running at the same time.
     const userDataDir = await mkdtemp(join(tmpdir(), 'viewmaster-e2e-userdata-'))
     try {
+      // electron-vite dev sets ELECTRON_RENDERER_URL; inherited, it would make the app load
+      // a dev server instead of the freshly built out/renderer.
+      const env: Record<string, string> = {}
+      for (const [k, v] of Object.entries(process.env)) {
+        if (v !== undefined && k !== 'ELECTRON_RENDERER_URL') env[k] = v
+      }
+      env.VIEWMASTER_OPEN = tmpRepo.root
       const app = await electron.launch({
         executablePath: electronBinaryPath as unknown as string,
-        args: [MAIN_ENTRY, `--user-data-dir=${userDataDir}`],
-        env: { ...process.env, VIEWMASTER_OPEN: tmpRepo.root }
+        args: [
+          MAIN_ENTRY,
+          `--user-data-dir=${userDataDir}`,
+          // Ubuntu 24.04 runners restrict unprivileged user namespaces and npm's chrome-sandbox
+          // isn't setuid root, so Chromium's sandbox can't start there.
+          ...(process.platform === 'linux' && process.env.CI ? ['--no-sandbox'] : [])
+        ],
+        env
       })
       try {
         // Playwright's `trace: 'on-first-retry'` config option only wraps

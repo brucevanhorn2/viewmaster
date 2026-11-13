@@ -18,6 +18,7 @@
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*",
+    "e2e/**/*",
     "electron.vite.config.ts",
     "vitest.config.ts"
   ]

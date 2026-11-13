@@ -9,5 +9,6 @@ export default defineConfig({
   // CPU/memory on a typical CI runner.
   workers: 1,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? 'html' : 'list'
+  // CI: list for readable job logs, html for the uploaded report.
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list'
 })
