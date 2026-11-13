@@ -3,6 +3,7 @@ import type { ChangedFile, FileStatus, RepoState, SidebarMode } from '@shared/ty
 import { buildTree, type TreeNode } from '@shared/tree'
 import { fileIconUrl, folderIconUrl } from '../icons'
 import { baselineLabel } from '../code/baselineLabel'
+import { SIDEBAR_SHORTCUT } from '../shortcuts'
 
 const STATUS_LETTER: Record<FileStatus, string> = {
   untracked: 'U',
@@ -296,27 +297,29 @@ export default function Sidebar({
             ×
           </button>
         )}
-        {state.kind === 'repo' && (
-          <span className="toolbar-segment">
-            {(['changed', 'browse'] as const).map((m) => (
-              <button
-                key={m}
-                className={`toolbar-button${state.mode === m ? ' active' : ''}`}
-                onClick={() => onSetMode(m)}
-              >
-                {m === 'changed' ? 'Changed' : 'Browse'}
-              </button>
-            ))}
-          </span>
-        )}
-        <button
-          className="sidebar-close"
-          title={`Hide sidebar (${navigator.userAgent.includes('Mac') ? '⌘B' : 'Ctrl+B'})`}
-          aria-label="Hide sidebar"
-          onClick={onClose}
-        >
-          ‹
-        </button>
+        <span className="sidebar-header-actions">
+          {state.kind === 'repo' && (
+            <span className="toolbar-segment">
+              {(['changed', 'browse'] as const).map((m) => (
+                <button
+                  key={m}
+                  className={`toolbar-button${state.mode === m ? ' active' : ''}`}
+                  onClick={() => onSetMode(m)}
+                >
+                  {m === 'changed' ? 'Changed' : 'Browse'}
+                </button>
+              ))}
+            </span>
+          )}
+          <button
+            className="sidebar-close"
+            title={`Hide sidebar (${SIDEBAR_SHORTCUT})`}
+            aria-label="Hide sidebar"
+            onClick={onClose}
+          >
+            ‹
+          </button>
+        </span>
       </div>
       <div className="sidebar-tree">
         {tree && tree.dirs.length === 0 && tree.files.length === 0 ? (

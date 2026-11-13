@@ -27,6 +27,7 @@ import {
 import { isStaleRequest } from './navigation/staleRequest'
 import { absPathOfModelUri, relativeToRoot, sameFsPath } from './code/monacoPath'
 import StatusNotice from './components/StatusNotice'
+import { SIDEBAR_SHORTCUT } from './shortcuts'
 
 function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Element {
   const [recents, setRecents] = useState<string[]>([])
@@ -62,8 +63,6 @@ function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Elem
   )
 }
 
-const SIDEBAR_SHORTCUT = navigator.userAgent.includes('Mac') ? '⌘B' : 'Ctrl+B'
-
 export default function App(): React.JSX.Element {
   const [repo, setRepo] = useState<RepoState | null>(null)
   const [navState, setNavState] = useState(initialNavigationState())
@@ -84,7 +83,19 @@ export default function App(): React.JSX.Element {
   // deterministic regardless of which call's IPC round-trip finishes first.
   const openRequestId = useRef(0)
 
-  const [sidebarVisible, setSidebarVisible] = useState(true)
+  const [sidebarVisible, setSidebarVisibleState] = useState(true)
+  const sidebarVisibleRef = useRef(true)
+  // Where focus was inside the sidebar when it was hidden, so showing it puts focus back
+  // (hiding makes the pane inert, which drops focus to <body>).
+  const sidebarFocus = useRef<HTMLElement | null>(null)
+  const setSidebarVisible = useCallback((visible: boolean): void => {
+    if (!visible && sidebarVisibleRef.current) {
+      const el = document.activeElement
+      sidebarFocus.current = el instanceof HTMLElement && el.closest('.sidebar-pane') ? el : null
+    }
+    sidebarVisibleRef.current = visible
+    setSidebarVisibleState(visible)
+  }, [])
   // Bumped on every Find in Files request so SearchPane refocuses its input even when
   // it was already open (e.g. open, hide the sidebar, Find in Files again).
   const [searchFocusRequest, setSearchFocusRequest] = useState(0)
@@ -122,6 +133,7 @@ export default function App(): React.JSX.Element {
     void window.viewmaster.openRepo(payload.root).then((state) => {
       if (isStaleRequest(myRequestId, openRequestId.current)) return
       setRepo(state)
+      setSidebarVisible(true)
       setNavState(pushEntry(initialNavigationState(), { absPath: payload.absPath }))
     })
   }, [])
@@ -314,7 +326,16 @@ export default function App(): React.JSX.Element {
       }),
     []
   )
-  useEffect(() => window.viewmaster.onMenuToggleSidebar(() => setSidebarVisible((v) => !v)), [])
+  useEffect(
+    () => window.viewmaster.onMenuToggleSidebar(() => setSidebarVisible(!sidebarVisibleRef.current)),
+    [setSidebarVisible]
+  )
+  useEffect(() => {
+    if (!sidebarVisible) return
+    const el = sidebarFocus.current
+    sidebarFocus.current = null
+    if (el?.isConnected && document.activeElement === document.body) el.focus()
+  }, [sidebarVisible])
   useEffect(() => window.viewmaster.onMenuGoBack(onGoBack), [onGoBack])
   useEffect(() => window.viewmaster.onMenuGoForward(onGoForward), [onGoForward])
 
@@ -327,8 +348,8 @@ export default function App(): React.JSX.Element {
 
   const onCloseSearch = useCallback((): void => setSearchOpen(false), [])
   const onCloseRelatedFiles = useCallback((): void => setRelatedFilesOpen(false), [])
-  const onCloseSidebar = useCallback((): void => setSidebarVisible(false), [])
-  const onShowSidebar = useCallback((): void => setSidebarVisible(true), [])
+  const onCloseSidebar = useCallback((): void => setSidebarVisible(false), [setSidebarVisible])
+  const onShowSidebar = useCallback((): void => setSidebarVisible(true), [setSidebarVisible])
 
   const navigationTarget = currentEntry(navState)?.target ?? null
 
