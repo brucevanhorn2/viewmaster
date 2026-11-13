@@ -99,20 +99,48 @@ npm run dist:linux     # build a Linux AppImage
 npm run dist:win       # build a Windows .exe
 ```
 
-### Running an unsigned macOS build
+### Releasing (macOS)
 
-The DMG is currently **unsigned** (no signing keys yet), so macOS Gatekeeper will
-refuse to open it on first launch. To run it:
+Release DMGs are universal (Intel + Apple Silicon), signed with a Developer ID
+Application certificate, and notarized by Apple so Gatekeeper opens them without
+any right-click workaround.
 
-1. Move `Second Look.app` to `/Applications` (optional).
-2. **Right-click the app → Open**, then confirm in the dialog.
+One-time setup:
 
-This is a one-time step per machine. Signing and notarization are on the roadmap.
+1. Install a **Developer ID Application** certificate in your login keychain.
+   electron-builder discovers the signing identity automatically.
+2. Create an app-specific password at [appleid.apple.com](https://appleid.apple.com).
+3. Export the notarization credentials in your shell:
+
+   ```bash
+   export APPLE_ID="you@example.com"
+   export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+   export APPLE_TEAM_ID="ABCDE12345"
+   ```
+
+Then build with `npm run dist:mac`. The signed, notarized DMG lands in `release/`.
+
+In CI, supply the certificate with `CSC_LINK` (base64-encoded `.p12`) and
+`CSC_KEY_PASSWORD` instead of a keychain, along with the three `APPLE_*`
+variables above.
+
+For a local build without signing or notarization:
+
+```bash
+npx electron-builder --mac -c.mac.identity=null -c.mac.notarize=false
+```
+
+An unsigned build is blocked by Gatekeeper on first launch; right-click the app
+and choose **Open** to run it.
+
+Second Look shells out to the system `git`, so Git or the Xcode Command Line
+Tools must be installed.
+
+On first launch, Second Look copies your recent folders and local history from
+View Master, its previous name. The old folder is left in place.
 
 ## Roadmap
 
-- Code signing + notarization for Gatekeeper-clean, distributable DMGs
-  ([#12](https://github.com/brucevanhorn2/viewmaster/issues/12)).
 - Configurable baseline (compare against an arbitrary branch or ref)
   ([#13](https://github.com/brucevanhorn2/viewmaster/issues/13)).
 
