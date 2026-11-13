@@ -33,4 +33,6 @@ test('related files opens its pane', async ({ window, electronApp }) => {
     Menu.getApplicationMenu()?.getMenuItemById('menu-related-files')?.click()
   })
   await expect(window.locator('.related-files-title')).toBeVisible()
+  // The title renders in every state; the References section only once a file's results load.
+  await expect(window.locator('.related-files-section-title', { hasText: 'References' })).toBeVisible()
 })

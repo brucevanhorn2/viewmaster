@@ -14,11 +14,16 @@ export interface TestRepo {
 export async function makeRepo(): Promise<TestRepo> {
   const root = await mkdtemp(join(tmpdir(), 'viewmaster-repo-'))
   const git = (...args: string[]): Promise<GitResult> => runGit(root, args)
+  // runGit never rejects on a nonzero exit; a broken fixture repo must fail here, not later.
+  const setup = async (...args: string[]): Promise<void> => {
+    const res = await git(...args)
+    if (res.code !== 0) throw new Error(`git ${args.join(' ')} failed (${res.code}): ${res.stderr}`)
+  }
 
-  await git('init', '-b', 'main')
-  await git('config', 'user.name', 'Test User')
-  await git('config', 'user.email', 'test@example.com')
-  await git('config', 'commit.gpgsign', 'false')
+  await setup('init', '-b', 'main')
+  await setup('config', 'user.name', 'Test User')
+  await setup('config', 'user.email', 'test@example.com')
+  await setup('config', 'commit.gpgsign', 'false')
 
   return {
     root,

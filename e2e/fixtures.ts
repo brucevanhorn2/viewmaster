@@ -14,6 +14,22 @@ import electronBinaryPath from 'electron'
 
 const MAIN_ENTRY = resolve(__dirname, '../out/main/index.js')
 
+// Inherited from the developer's shell, these would change how the app starts:
+// ELECTRON_RENDERER_URL (set by electron-vite dev) loads a dev server instead of out/renderer;
+// ELECTRON_RUN_AS_NODE (set by some Electron-hosted terminals) starts Electron as plain Node.
+const STRIPPED_ENV = new Set(['ELECTRON_RENDERER_URL', 'ELECTRON_RUN_AS_NODE'])
+
+/** Closes the app, killing it if close() hangs (e.g. after a crash), so teardown can clean up. */
+async function closeApp(app: ElectronApplication): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<'timeout'>((r) => {
+    timer = setTimeout(() => r('timeout'), 10_000)
+  })
+  const result = await Promise.race([app.close().then(() => 'closed', () => 'failed'), timedOut])
+  clearTimeout(timer)
+  if (result !== 'closed') app.process().kill()
+}
+
 function must(res: GitResult, what: string): void {
   if (res.code !== 0) throw new Error(`${what} failed (${res.code}): ${res.stderr}`)
 }
@@ -49,11 +65,9 @@ export const test = base.extend<{
     // Electron instance running at the same time.
     const userDataDir = await mkdtemp(join(tmpdir(), 'viewmaster-e2e-userdata-'))
     try {
-      // electron-vite dev sets ELECTRON_RENDERER_URL; inherited, it would make the app load
-      // a dev server instead of the freshly built out/renderer.
-      const env: Record<string, string> = {}
+            const env: Record<string, string> = {}
       for (const [k, v] of Object.entries(process.env)) {
-        if (v !== undefined && k !== 'ELECTRON_RENDERER_URL') env[k] = v
+        if (v !== undefined && !STRIPPED_ENV.has(k)) env[k] = v
       }
       env.VIEWMASTER_OPEN = tmpRepo.root
       const app = await electron.launch({
@@ -94,8 +108,8 @@ export const test = base.extend<{
         }
       } finally {
         // If the app already crashed, close() can reject or hang; don't let that replace
-        // the test's own error.
-        await Promise.race([app.close().catch(() => {}), new Promise((r) => setTimeout(r, 10_000))])
+        // the test's own error or leave the process holding the temp dirs.
+        await closeApp(app)
       }
     } finally {
       // Chromium helpers can hold user-data files briefly after close on Windows (EBUSY).

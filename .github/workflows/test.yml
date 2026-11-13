@@ -24,6 +24,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
@@ -35,10 +36,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
       - name: Run e2e tests
+        id: e2e
         run: xvfb-run -a npm run test:e2e
 
       - name: Upload Playwright report
-        if: failure()
+        # Only when e2e itself failed (not when unit tests failed and e2e never ran).
+        if: failure() && steps.e2e.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
