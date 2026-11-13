@@ -139,11 +139,13 @@ function buildMenu(): void {
         ...editExtras,
         { type: 'separator' },
         {
+          id: 'menu-find-in-files',
           label: 'Find in Files…',
           accelerator: 'CmdOrCtrl+Shift+F',
           click: () => sendFindInFiles()
         },
         {
+          id: 'menu-related-files',
           label: 'Related Files…',
           accelerator: 'CmdOrCtrl+Alt+R',
           click: () => sendRelatedFiles()

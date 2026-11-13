@@ -41,6 +41,8 @@ Thumbs.db
 # Vite / test caches
 .vite/
 coverage/
+playwright-report/
+test-results/
 
 # subagent-driven-development scratch (briefs, reports, review packages, ledger)
 .superpowers/

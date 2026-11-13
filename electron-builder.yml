@@ -10,6 +10,9 @@ files:
   - '!electron.vite.config.ts'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,vitest.config.ts}'
   - '!{.gitignore,README.md}'
+  - '!e2e/**'
+  - '!playwright-report/**'
+  - '!test-results/**'
 asarUnpack:
   - node_modules/pyright/**
 npmRebuild: false
