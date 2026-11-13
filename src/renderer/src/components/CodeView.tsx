@@ -7,6 +7,7 @@ import { languageForFile } from '../monacoSetup'
 import { extractImportSpecifiers, candidateImportPaths, isTsJsExtension } from '../code/resolveImports'
 import { encodeForMonacoPath } from '../code/monacoPath'
 import { touchModel } from '../code/modelLru'
+import { syncModelContent } from '../code/syncModelContent'
 
 // Bounds how many distinct files' Monaco models can accumulate at once
 // within one open folder (see docs/superpowers/specs/2026-08-26-monaco-
@@ -28,6 +29,18 @@ export default function CodeView({
 }): React.JSX.Element {
   const [editorInstance, setEditorInstance] = useState<editor.IStandaloneCodeEditor | null>(null)
   const decorationsRef = useRef<editor.IEditorDecorationsCollection | null>(null)
+
+  // A file switch can briefly render the new path with the previous file's
+  // content, making @monaco-editor/react create the new file's model with
+  // the old text; with keepCurrentModel that model is later reused and its
+  // `value` ignored. Fix the text of the model our path resolves to (looked
+  // up by URI, not getModel(), which may lag the library's own model switch).
+  // Declared before the reveal effect so revealLine applies to fixed content.
+  useEffect(() => {
+    if (!editorInstance) return
+    const model = monaco.editor.getModel(monaco.Uri.parse(encodeForMonacoPath(absPath)))
+    syncModelContent(model, content)
+  }, [editorInstance, absPath, content])
 
   useEffect(() => {
     if (!editorInstance) return

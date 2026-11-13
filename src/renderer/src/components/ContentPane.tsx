@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
-import type { ChangedFile, FileContent, HistoryVersion } from '@shared/types'
+import type { ChangedFile, ExternalKind, FileContent, HistoryVersion } from '@shared/types'
 import { isDefaultSelection, type RevisionRef, type Selection } from '../history/selection'
 import type { NavigationTarget } from '../navigation/history'
 import CodeView from './CodeView'
@@ -12,6 +12,8 @@ import ImageView from './ImageView'
 import { rasterDataUrl, svgDataUrl } from '../image/dataUrl'
 import PdfView from './PdfView'
 import { requiresCodeModeForLineTarget } from '../navigation/lineTargetMode'
+import { externalLabel } from '../navigation/externalLabel'
+import { relativeToRoot } from '../code/monacoPath'
 
 type Mode = 'view' | 'marks' | 'sideBySideRendered' | 'code' | 'diff'
 
@@ -62,7 +64,27 @@ export default function ContentPane({
   onGoBack: () => void
   onGoForward: () => void
 }): React.JSX.Element {
-  const [mode, setMode] = useState<Mode>('view')
+  const [modeState, setMode] = useState<Mode>('view')
+  const [extKind, setExtKind] = useState<ExternalKind | null>(null)
+  // A file outside the opened folder is always plain code view.
+  const external = extKind !== null
+  const mode: Mode = external ? 'code' : modeState
+
+  // Ask main whether a file outside the opened folder is an allowed external
+  // one (stdlib, module cache, venv, stubs). Reset first so a previous file's
+  // marking never lingers; ignore a late answer for a file no longer shown.
+  useLayoutEffect(() => {
+    setExtKind(null)
+    const abs = file?.absPath
+    if (!abs || !workspaceRoot || relativeToRoot(abs, workspaceRoot) !== null) return
+    let stale = false
+    void window.viewmaster.externalKind(abs).then((k) => {
+      if (!stale) setExtKind(k)
+    })
+    return () => {
+      stale = true
+    }
+  }, [file?.absPath, workspaceRoot])
   const [sideBySide, setSideBySide] = useState(true)
   const [content, setContent] = useState<FileContent | null>(null)
   const [baseContent, setBaseContent] = useState<string | null>(null)
@@ -307,11 +329,11 @@ export default function ContentPane({
   // content-dependent toggles for it just lands back on the "File not
   // found" placeholder -- safe, not a crash, since those modes still fall
   // through to the content.kind === 'missing' branch above.
-  const showToolbarToggles = content?.kind === 'text' || content?.kind === 'missing'
+  const showToolbarToggles = !external && (content?.kind === 'text' || content?.kind === 'missing')
 
   return (
     <div className="content-pane">
-      <div className="toolbar">
+      <div className={external ? 'toolbar external' : 'toolbar'}>
         <span className="toolbar-nav">
           <button className="toolbar-button" onClick={onGoBack} disabled={!canGoBack} title="Back">
             ←
@@ -325,6 +347,7 @@ export default function ContentPane({
             →
           </button>
         </span>
+        {extKind && <span className="toolbar-external-label">{externalLabel(extKind)}</span>}
         <span className="toolbar-path" title={file.absPath}>
           {file.path}
         </span>

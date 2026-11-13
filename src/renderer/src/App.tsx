@@ -25,6 +25,8 @@ import {
   type NavigationTarget
 } from './navigation/history'
 import { isStaleRequest } from './navigation/staleRequest'
+import { absPathOfModelUri, relativeToRoot, sameFsPath } from './code/monacoPath'
+import StatusNotice from './components/StatusNotice'
 
 function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Element {
   const [recents, setRecents] = useState<string[]>([])
@@ -160,11 +162,12 @@ export default function App(): React.JSX.Element {
   const resolveChangedFile = useCallback(
     (absPath: string): ChangedFile | null => {
       if (!repo || (repo.kind !== 'repo' && repo.kind !== 'folder')) return null
-      const existing = repo.files.find((f) => f.absPath === absPath)
+      const existing = repo.files.find((f) => sameFsPath(f.absPath, absPath))
       if (existing) return existing
-      const rel = absPath.startsWith(repo.root)
-        ? absPath.slice(repo.root.length).replace(/^\/+/, '')
-        : absPath
+      // Inside the root: repo-relative path. Outside (stdlib, module cache,
+      // venv...): the forward-slash absolute path.
+      const rel =
+        relativeToRoot(absPath, repo.root) ?? absPath.split(String.fromCharCode(92)).join('/')
       return { path: rel, absPath, status: 'unchanged' }
     },
     [repo]
@@ -194,7 +197,12 @@ export default function App(): React.JSX.Element {
   // Load local history for the selected file (git repos only), refreshing when
   // the watcher reports a change.
   useEffect(() => {
-    if (!selected || repo?.kind !== 'repo') {
+    // External files (outside the opened folder) have no local history.
+    if (
+      !selected ||
+      repo?.kind !== 'repo' ||
+      relativeToRoot(selected.absPath, repo.root) === null
+    ) {
       setVersions([])
       return
     }
@@ -246,14 +254,24 @@ export default function App(): React.JSX.Element {
         // editor" request, same-file included — it does not skip this
         // callback for same-file jumps on its own (verified against
         // AbstractCodeEditorService.openCodeEditor, which just tries
-        // registered handlers in order). Returning `false` here for a
-        // same-file target falls through to Monaco's own default handler
-        // (StandaloneCodeEditorService's built-in one, registered before
-        // ours), which moves the cursor within the current model natively
-        // — no history entry pushed, matching the design spec's decision
-        // 5. Only a genuinely different file goes through navigateTo.
-        if (source.getModel()?.uri.fsPath === resource.fsPath) {
-          return false
+        // registered handlers in order). A same-file target moves the
+        // cursor in place here — no history entry pushed, matching the
+        // design spec's decision 5. (It is not left to Monaco's default
+        // handler: that matches models by URI string, and on Windows our
+        // models are Uri.parse'd paths while LSP locations are Uri.file
+        // URIs, so it silently does nothing.) Only a genuinely different
+        // file goes through navigateTo.
+        const sourceModel = source.getModel()
+        if (sourceModel && sameFsPath(absPathOfModelUri(sourceModel.uri), resource.fsPath)) {
+          if (selectionOrPosition && 'startLineNumber' in selectionOrPosition) {
+            source.setSelection(selectionOrPosition)
+            source.revealRangeInCenterIfOutsideViewport(selectionOrPosition)
+          } else if (selectionOrPosition) {
+            source.setPosition(selectionOrPosition)
+            source.revealPositionInCenterIfOutsideViewport(selectionOrPosition)
+          }
+          source.focus()
+          return true
         }
         const line =
           selectionOrPosition && 'lineNumber' in selectionOrPosition
@@ -370,6 +388,7 @@ export default function App(): React.JSX.Element {
           />
         </Allotment.Pane>
       </Allotment>
+      <StatusNotice />
     </div>
   )
 }

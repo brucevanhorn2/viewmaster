@@ -13,3 +13,49 @@
 export function encodeForMonacoPath(path: string): string {
   return path.replace(/#/g, '%23').replace(/\?/g, '%3F')
 }
+
+/**
+ * The filesystem path a Monaco model stands for. The main editor's model URI
+ * comes from `Uri.parse(encodeForMonacoPath(absPath))`, and on a Windows path
+ * that parse reads the drive letter as a one-letter scheme (`C:\a\b.go` ->
+ * scheme `C`, path `\a\b.go`), so `.fsPath` loses the drive. Rebuild it from
+ * scheme + path in that case; models built with `Uri.file` (scheme `file`)
+ * already have a correct `.fsPath`.
+ */
+export function absPathOfModelUri(uri: { scheme: string; path: string; fsPath: string }): string {
+  if (/^[A-Za-z]$/.test(uri.scheme)) return `${uri.scheme}:${uri.path}`
+  return uri.fsPath
+}
+
+/**
+ * Whether two filesystem paths name the same file. The renderer cannot read
+ * `process.platform`, so a drive-letter path (`C:...`) on either side marks
+ * Windows semantics: separators are unified to `/` and case is ignored.
+ * Otherwise the comparison is exact.
+ */
+export function sameFsPath(a: string, b: string): boolean {
+  if (/^[a-zA-Z]:/.test(a) || /^[a-zA-Z]:/.test(b)) {
+    const norm = (p: string): string => p.split(String.fromCharCode(92)).join('/').toLowerCase()
+    return norm(a) === norm(b)
+  }
+  return a === b
+}
+
+/**
+ * The forward-slash path of `absPath` relative to `root`, or null when it is
+ * not strictly inside `root`. Separators are unified and, for drive-letter
+ * paths (Windows semantics, as in sameFsPath), case is ignored. The match is
+ * on a segment boundary, so `C:\repo2` is not inside `C:\repo`.
+ */
+export function relativeToRoot(absPath: string, root: string): string | null {
+  const bs = String.fromCharCode(92)
+  const fwd = (p: string): string => p.split(bs).join('/')
+  const win = /^[a-zA-Z]:/.test(absPath) || /^[a-zA-Z]:/.test(root)
+  const r = fwd(root).replace(/\/+$/, '')
+  const p = fwd(absPath)
+  if (!r) return null
+  const cmp = (s: string): string => (win ? s.toLowerCase() : s)
+  if (!cmp(p).startsWith(cmp(r) + '/')) return null
+  const rel = p.slice(r.length + 1)
+  return rel === '' ? null : rel
+}

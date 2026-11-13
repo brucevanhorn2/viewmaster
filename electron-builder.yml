@@ -10,6 +10,8 @@ files:
   - '!electron.vite.config.ts'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,vitest.config.ts}'
   - '!{.gitignore,README.md}'
+asarUnpack:
+  - node_modules/pyright/**
 npmRebuild: false
 # No publishing / auto-update artifacts — local unsigned builds only.
 publish: null

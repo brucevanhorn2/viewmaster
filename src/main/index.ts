@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, dialog, shell } from 'electron'
 import { join, dirname } from 'path'
 import { registerIpc, disposeIpc } from './ipc'
+import { installQuitDisposal } from './quitDisposal'
 import { getRecentFolders, getWindowBounds, setWindowBounds } from './store'
 import { getPathArgFromArgv } from './argv'
 import icon from '../../resources/icon.png?asset'
@@ -251,3 +252,7 @@ app.on('window-all-closed', async () => {
   await disposeIpc()
   if (process.platform !== 'darwin') app.quit()
 })
+
+// Dispose language servers (issue #22) on every quit path; the re-quit is
+// deferred a tick, or Electron ignores it and the app never exits.
+installQuitDisposal(app, disposeIpc)
