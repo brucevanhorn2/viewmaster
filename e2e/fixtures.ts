@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { makeRepo, type TestRepo } from '../src/main/git/testRepo'
+import type { GitResult } from '../src/main/git/run'
 
 // `electron`'s package resolves to the platform Electron *binary path*
 // (a plain string) when required from ordinary Node, not the Electron API
@@ -12,6 +13,10 @@ import { makeRepo, type TestRepo } from '../src/main/git/testRepo'
 import electronBinaryPath from 'electron'
 
 const MAIN_ENTRY = resolve(__dirname, '../out/main/index.js')
+
+function must(res: GitResult, what: string): void {
+  if (res.code !== 0) throw new Error(`${what} failed (${res.code}): ${res.stderr}`)
+}
 
 export const test = base.extend<{
   tmpRepo: TestRepo
@@ -26,8 +31,10 @@ export const test = base.extend<{
     try {
       await repo.write('committed.txt', 'hello from committed\n')
       await repo.write('other.txt', 'searchable-marker-xyz\n')
-      await repo.git('add', '.')
-      await repo.git('commit', '-m', 'initial commit')
+      // runGit never rejects on a nonzero exit; fail setup loudly instead of letting a
+      // missing commit surface later as confusing locator timeouts.
+      must(await repo.git('add', '.'), 'git add')
+      must(await repo.git('commit', '-m', 'initial commit'), 'git commit')
       await repo.write('committed.txt', 'hello from committed\nedited line\n')
       await use(repo)
     } finally {
@@ -54,9 +61,9 @@ export const test = base.extend<{
         args: [
           MAIN_ENTRY,
           `--user-data-dir=${userDataDir}`,
-          // Ubuntu 24.04 runners restrict unprivileged user namespaces and npm's chrome-sandbox
-          // isn't setuid root, so Chromium's sandbox can't start there.
-          ...(process.platform === 'linux' && process.env.CI ? ['--no-sandbox'] : [])
+          // Ubuntu 24.04 (CI runners and desktops alike) restricts unprivileged user namespaces,
+          // and npm's chrome-sandbox isn't setuid root, so Chromium's sandbox can't start there.
+          ...(process.platform === 'linux' ? ['--no-sandbox'] : [])
         ],
         env
       })
@@ -86,10 +93,13 @@ export const test = base.extend<{
           }
         }
       } finally {
-        await app.close()
+        // If the app already crashed, close() can reject or hang; don't let that replace
+        // the test's own error.
+        await Promise.race([app.close().catch(() => {}), new Promise((r) => setTimeout(r, 10_000))])
       }
     } finally {
-      await rm(userDataDir, { recursive: true, force: true })
+      // Chromium helpers can hold user-data files briefly after close on Windows (EBUSY).
+      await rm(userDataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
     }
   },
 

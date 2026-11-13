@@ -27,6 +27,8 @@ test('find in files finds a match and navigates to it', async ({ window, electro
 
 test('related files opens its pane', async ({ window, electronApp }) => {
   await window.getByText('committed.txt').click()
+  // Related Files acts on the selected file; wait until the selection has rendered.
+  await expect(window.locator('.toolbar-path')).toHaveText('committed.txt')
   await electronApp.evaluate(({ Menu }) => {
     Menu.getApplicationMenu()?.getMenuItemById('menu-related-files')?.click()
   })
