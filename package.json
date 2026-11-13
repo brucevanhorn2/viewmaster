@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "build": "npm run typecheck && node --max-old-space-size=4096 ./node_modules/.bin/electron-vite build",
+    "build": "npm run typecheck && node --max-old-space-size=4096 ./node_modules/electron-vite/bin/electron-vite.js build",
     "test": "vitest run",
     "test:e2e": "npm run build && playwright test -c e2e/playwright.config.ts",
     "dist:mac": "npm run build && electron-builder --mac",
