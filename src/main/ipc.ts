@@ -1,7 +1,7 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, net, shell } from 'electron'
 import type { FSWatcher } from 'fs'
 import { realpath } from 'fs/promises'
-import { join, relative } from 'path'
+import { isAbsolute, join, relative, resolve } from 'path'
 import type {
   BaselineKind,
   ExternalKind,
@@ -17,14 +17,15 @@ import type {
 import { runGit } from './git/run'
 import { resolveBaseline } from './git/baseline'
 import { collectChanges } from './git/changes'
-import { readBaseFile, readCurrentFile } from './git/content'
+import { readBaseBlob, readBaseFile, readCurrentFile } from './git/content'
 import { watchRepo } from './watcher'
 import { addRecentFolder, getFolderMode, getRecentFolders, setFolderMode } from './store'
 import { createRecorder, type Recorder } from './history/recorder'
 import { historyPaths } from './history/paths'
 import { getObject, readVersions } from './history/store'
 import { browseFiles, listFolderTree, listGitTree, toUnchangedFiles } from './files/browse'
-import { readResource, resolveWithinRoot } from './files/resource'
+import { isImageMime, mimeFor, readResource, resolveWithinRoot } from './files/resource'
+import { fetchRemoteImage } from './files/remoteImage'
 import { searchFiles } from './search/scan'
 import { looksLikeDefinition } from './search/definitionHeuristics'
 import { looksLikeImportOf } from './search/importHeuristics'
@@ -386,6 +387,27 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     if (!session) return Promise.resolve(null)
     return readResource(absPath, session.root)
   })
+
+  ipcMain.handle(
+    'file:readBaseResource',
+    async (_e, absPath: string): Promise<{ base64: string; mime: string } | null> => {
+      if (!session || !session.baseline) return null
+      const { root, baseline } = session
+      const rel = relative(root, resolve(absPath))
+      if (!rel || isAbsolute(rel) || rel.startsWith('..')) return null
+      const mime = mimeFor(rel)
+      if (!isImageMime(mime)) return null
+      const base = baseline.kind === 'merge-base' ? baseline.base : baseline.kind === 'custom' ? baseline.ref : 'HEAD'
+      const buf = await readBaseBlob(root, base, rel.split('\\').join('/'))
+      return buf ? { base64: buf.toString('base64'), mime } : null
+    }
+  )
+
+  ipcMain.handle(
+    'file:fetchRemoteImage',
+    (_e, url: string): Promise<{ base64: string; mime: string } | null> =>
+      fetchRemoteImage(url, net.fetch as typeof fetch)
+  )
 
   ipcMain.handle('app:recentFolders', (): string[] => getRecentFolders())
 

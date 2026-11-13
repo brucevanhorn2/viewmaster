@@ -1,7 +1,9 @@
+import { execFile } from 'child_process'
 import { readFile, stat } from 'fs/promises'
 import { extname } from 'path'
 import type { FileContent } from '@shared/types'
 import { runGit } from './run'
+import { MAX_RESOURCE_SIZE } from '../files/resource'
 
 export const MAX_SIZE = 2 * 1024 * 1024
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024
@@ -88,4 +90,34 @@ export async function readBaseFile(
   if (!base) return ''
   const res = await runGit(root, ['show', `${base}:${relPath}`])
   return res.code === 0 ? res.stdout : ''
+}
+
+function gitBuffer(root: string, args: string[]): Promise<Buffer | null> {
+  return new Promise((resolve) => {
+    execFile(
+      'git',
+      args,
+      { cwd: root, maxBuffer: MAX_RESOURCE_SIZE + 1024, encoding: 'buffer' },
+      (err, stdout) => resolve(err ? null : stdout)
+    )
+  })
+}
+
+/**
+ * Raw bytes of `<base>:<relPath>` when that object is a blob. Null when there
+ * is no baseline, the path is missing or not a blob (e.g. a directory), git
+ * fails, or the blob exceeds MAX_RESOURCE_SIZE.
+ */
+export async function readBaseBlob(
+  root: string,
+  base: string | null,
+  relPath: string
+): Promise<Buffer | null> {
+  if (!base) return null
+  const spec = `${base}:${relPath}`
+  const type = await gitBuffer(root, ['cat-file', '-t', spec])
+  if (!type || type.toString('utf8').trim() !== 'blob') return null
+  const buf = await gitBuffer(root, ['show', spec])
+  if (!buf || buf.length > MAX_RESOURCE_SIZE) return null
+  return buf
 }

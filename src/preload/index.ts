@@ -28,6 +28,10 @@ const api = {
   readBaseFile: (relPath: string): Promise<string> => ipcRenderer.invoke('file:readBase', relPath),
   readResource: (absPath: string): Promise<{ base64: string; mime: string } | null> =>
     ipcRenderer.invoke('file:readResource', absPath),
+  readBaseResource: (absPath: string): Promise<{ base64: string; mime: string } | null> =>
+    ipcRenderer.invoke('file:readBaseResource', absPath),
+  fetchRemoteImage: (url: string): Promise<{ base64: string; mime: string } | null> =>
+    ipcRenderer.invoke('file:fetchRemoteImage', url),
   recentFolders: (): Promise<string[]> => ipcRenderer.invoke('app:recentFolders'),
   copyPath: (absPath: string): void => {
     void ipcRenderer.invoke('app:copyPath', absPath)

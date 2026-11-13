@@ -1,7 +1,7 @@
 import { readFile, realpath, stat } from 'fs/promises'
 import { extname, isAbsolute, relative, resolve } from 'path'
 
-const MAX_RESOURCE_SIZE = 10 * 1024 * 1024
+export const MAX_RESOURCE_SIZE = 10 * 1024 * 1024
 
 const MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
@@ -11,6 +11,8 @@ const MIME_BY_EXT: Record<string, string> = {
   '.svg': 'image/svg+xml',
   '.webp': 'image/webp',
   '.ico': 'image/x-icon',
+  '.bmp': 'image/bmp',
+  '.avif': 'image/avif',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.ttf': 'font/ttf',
@@ -18,7 +20,7 @@ const MIME_BY_EXT: Record<string, string> = {
   '.css': 'text/css'
 }
 
-function mimeFor(absPath: string): string {
+export function mimeFor(absPath: string): string {
   return MIME_BY_EXT[extname(absPath).toLowerCase()] ?? 'application/octet-stream'
 }
 
@@ -82,4 +84,20 @@ export async function readResource(
   } catch {
     return null
   }
+}
+
+const IMAGE_MIMES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+  'image/bmp',
+  'image/x-icon',
+  'image/avif'
+])
+
+/** True for exactly the image MIME types `mimeFor` can produce. */
+export function isImageMime(mime: string): boolean {
+  return IMAGE_MIMES.has(mime)
 }
