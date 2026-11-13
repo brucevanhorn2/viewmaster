@@ -1,10 +1,12 @@
-import { useEffect, useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import type { ChangedFile, ExternalKind, FileContent, HistoryVersion } from '@shared/types'
 import { isDefaultSelection, type RevisionRef, type Selection } from '../history/selection'
 import type { NavigationTarget } from '../navigation/history'
 import CodeView from './CodeView'
 import DiffView from './DiffView'
-import MarkdownView from './MarkdownView'
+import MarkdownView, { type MarkdownImages } from './MarkdownView'
+import { cachedReader } from '../markdown/images'
+import { useRemoteAllowance } from '../markdown/remoteAllowance'
 import MarkdownSideBySideView from './MarkdownSideBySideView'
 import HtmlView from './HtmlView'
 import Placeholder from './Placeholder'
@@ -184,6 +186,28 @@ export default function ContentPane({
     }
   }, [file, mode, selection, refreshKey])
 
+  // Readers are cached per file + refresh so repeated/concurrent image reads share one IPC call.
+  const absPathKey = file?.absPath ?? null
+  const readers = useMemo(
+    () => ({
+      disk: cachedReader((p: string) => window.viewmaster.readResource(p)),
+      baseline: cachedReader((p: string) => window.viewmaster.readBaseResource(p)),
+      remote: cachedReader((u: string) => window.viewmaster.fetchRemoteImage(u))
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [absPathKey, refreshKey]
+  )
+  const [allowRemote, allowRemoteNow] = useRemoteAllowance(absPathKey)
+  const imagesFor = (read: typeof readers.disk): MarkdownImages => ({
+    readLocal: read,
+    readRemote: readers.remote,
+    allowRemote,
+    onAllowRemote: allowRemoteNow
+  })
+  // Baseline side reads from the git baseline; 'now' and local-history sides read from disk.
+  const sideImages = (ref: RevisionRef): MarkdownImages =>
+    imagesFor(ref === 'baseline' ? readers.baseline : readers.disk)
+
   if (!file) {
     return (
       <div className="content-pane">
@@ -251,6 +275,7 @@ export default function ContentPane({
           onNavigate={onMarkdownNavigate}
           scrollToAnchor={anchorTarget}
           onAnchorConsumed={onTargetConsumed}
+          images={imagesFor(readers.disk)}
         />
       )
   } else if (
@@ -274,6 +299,8 @@ export default function ContentPane({
           onNavigate={onMarkdownNavigate}
           scrollToAnchor={anchorTarget}
           onAnchorConsumed={onTargetConsumed}
+          oldImages={sideImages(selection.base)}
+          newImages={sideImages(selection.compare)}
         />
       )
   } else if (content.kind === 'image') {
@@ -306,6 +333,7 @@ export default function ContentPane({
         onNavigate={onMarkdownNavigate}
         scrollToAnchor={anchorTarget}
         onAnchorConsumed={onTargetConsumed}
+        images={imagesFor(readers.disk)}
       />
     )
   } else if (mode === 'code' && isHtml(file.path)) {

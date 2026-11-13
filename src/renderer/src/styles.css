@@ -480,8 +480,15 @@ body {
   color: #d4d4d4;
 }
 
-.markdown-sidebyside {
+.markdown-sidebyside-wrap {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.markdown-sidebyside {
+  flex: 1;
+  min-height: 0;
   display: flex;
 }
 

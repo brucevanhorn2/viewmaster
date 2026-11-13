@@ -5,6 +5,16 @@ import { useDocumentPanZoom } from '../markdown/useDocumentPanZoom'
 import { composeMarks } from '../markdown/marksDiff'
 import { classifyLinkHref } from '../markdown/links'
 import { scrollToId } from '../markdown/scrollToId'
+import { resolveMarkdownImages } from '../markdown/images'
+import type { ResourceReader } from '../html/render'
+import RemoteImagesBar from './RemoteImagesBar'
+
+export interface MarkdownImages {
+  readLocal: ResourceReader
+  readRemote: (url: string) => Promise<{ base64: string; mime: string } | null>
+  allowRemote: boolean
+  onAllowRemote: () => void
+}
 
 /**
  * Rendered markdown. When `baseContent` is a string (possibly ''), renders
@@ -18,7 +28,8 @@ export default function MarkdownView({
   workspaceRoot,
   onNavigate,
   scrollToAnchor = null,
-  onAnchorConsumed
+  onAnchorConsumed,
+  images
 }: {
   content: string
   baseContent?: string | null
@@ -27,9 +38,12 @@ export default function MarkdownView({
   onNavigate: (absPath: string, anchor?: string) => void
   scrollToAnchor?: string | null
   onAnchorConsumed: () => void
+  images: MarkdownImages
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [html, setHtml] = useState('')
+  const [remoteCount, setRemoteCount] = useState(0)
+  const { readLocal, readRemote, allowRemote, onAllowRemote } = images
   // Tracks which absPath the currently-rendered `html` state actually
   // belongs to. Since rendering is async, `html` can briefly still hold the
   // previous document's markup after `absPath` has already switched to a new
@@ -49,11 +63,29 @@ export default function MarkdownView({
       return sanitizeHtml(composeMarks(oldHtml, newHtml))
     }
 
+    // Images resolve against the rendered HTML; a stale result (file/content/allowance
+    // changed meanwhile) is discarded by the same flag as the render itself.
+    const withImages = async (rendered: string): Promise<{ html: string; remoteCount: number }> => {
+      try {
+        return await resolveMarkdownImages(rendered, {
+          docAbsPath: absPath,
+          workspaceRoot,
+          readLocal,
+          readRemote,
+          allowRemote
+        })
+      } catch {
+        return { html: rendered, remoteCount: 0 }
+      }
+    }
+
     render()
-      .then((rendered) => {
+      .then(withImages)
+      .then((r) => {
         if (!stale) {
           htmlForPath.current = absPath
-          setHtml(rendered)
+          setRemoteCount(r.remoteCount)
+          setHtml(r.html)
         }
       })
       .catch(async (err: unknown) => {
@@ -83,7 +115,7 @@ export default function MarkdownView({
     return () => {
       stale = true
     }
-  }, [content, baseContent, absPath])
+  }, [content, baseContent, absPath, workspaceRoot, readLocal, readRemote, allowRemote])
 
   useDocumentPanZoom(ref, html, absPath)
   // Stable prop object: React 19 re-assigns innerHTML whenever this object changes,
@@ -119,6 +151,7 @@ export default function MarkdownView({
 
   return (
     <div className="markdown-scroll">
+      <RemoteImagesBar count={remoteCount} onLoad={onAllowRemote} />
       <div
         ref={ref}
         className="markdown-body"
