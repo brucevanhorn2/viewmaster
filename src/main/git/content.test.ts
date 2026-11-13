@@ -217,6 +217,17 @@ describe('readBaseBlob', () => {
     expect(await readBaseBlob(repo.root, null, 'img/a.png')).toBeNull()
   })
 
+  it('readBaseBlob returns null for a Git LFS pointer', async () => {
+    await repo.write(
+      'img/big.png',
+      'version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 123\n'
+    )
+    await repo.git('add', '.')
+    await repo.git('commit', '-m', 'lfs')
+    const base = (await repo.git('rev-parse', 'HEAD')).stdout.trim()
+    expect(await readBaseBlob(repo.root, base, 'img/big.png')).toBeNull()
+  })
+
   it('readBaseBlob returns null for a directory path at base', async () => {
     const base = await commitPng()
     expect(await readBaseBlob(repo.root, base, 'img')).toBeNull()

@@ -11,16 +11,38 @@ export interface ImageResolveOptions {
   readLocal: ResourceReader
   readRemote: (url: string) => Promise<ImageData>
   allowRemote: boolean
+  /** Skip all reads: images that would be read become "loading" boxes instead. */
+  deferLoads?: boolean
 }
 
-/** Memoizes the read promise per key so concurrent and repeated calls share one read. */
-export function cachedReader<K>(read: (k: K) => Promise<ImageData>): (k: K) => Promise<ImageData> {
+export interface ImageResult {
+  html: string
+  /** Distinct http(s) image URLs in the document (blocked or not). */
+  remoteUrls: string[]
+}
+
+/**
+ * Memoizes the read promise per key so concurrent and repeated calls share one read.
+ * With `retryFailures`, a null/failed result is dropped from the cache once settled, so the
+ * next render tries again (used for remote images, where failures are often transient).
+ */
+export function cachedReader<K>(
+  read: (k: K) => Promise<ImageData>,
+  { retryFailures = false }: { retryFailures?: boolean } = {}
+): (k: K) => Promise<ImageData> {
   const cache = new Map<K, Promise<ImageData>>()
   return (k) => {
     let p = cache.get(k)
     if (!p) {
-      p = read(k)
+      const mine: Promise<ImageData> = read(k)
+      p = mine
       cache.set(k, p)
+      if (retryFailures) {
+        const forget = (): void => {
+          if (cache.get(k) === mine) cache.delete(k)
+        }
+        mine.then((r) => (r ? undefined : forget()), forget)
+      }
     }
     return p
   }
@@ -30,10 +52,17 @@ const SCHEME = /^[a-z][a-z0-9+.-]*:/i
 const REMOTE = /^https?:/i
 const ABSOLUTE = /^(\/|[A-Za-z]:\/)/
 
-function placeholder(doc: Document, img: Element, src: string, remote: boolean): HTMLElement {
+function placeholder(
+  doc: Document,
+  img: Element,
+  src: string,
+  remote: boolean,
+  loading = false
+): HTMLElement {
   const alt = img.getAttribute('alt') ?? ''
   const box = doc.createElement('span')
-  box.className = remote ? 'md-img-missing md-img-remote' : 'md-img-missing'
+  box.className =
+    'md-img-missing' + (remote ? ' md-img-remote' : '') + (loading ? ' md-img-loading' : '')
   box.setAttribute('role', 'img')
   box.setAttribute('aria-label', alt || src)
   if (alt) {
@@ -75,9 +104,9 @@ async function safeRead<K>(read: (k: K) => Promise<ImageData>, key: K): Promise<
 export async function resolveMarkdownImages(
   html: string,
   opts: ImageResolveOptions
-): Promise<{ html: string; remoteCount: number }> {
+): Promise<ImageResult> {
   const doc = new DOMParser().parseFromString(html, 'text/html')
-  let remoteCount = 0
+  const remoteUrls = new Set<string>()
 
   doc.querySelectorAll('source').forEach((s) => s.removeAttribute('srcset'))
 
@@ -92,11 +121,17 @@ export async function resolveMarkdownImages(
     const fail = (remote: boolean): void => img.replaceWith(placeholder(doc, img, src, remote))
     const succeed = (r: { base64: string; mime: string }): void =>
       img.setAttribute('src', `data:${r.mime};base64,${r.base64}`)
+    const pending = (remote: boolean): void =>
+      img.replaceWith(placeholder(doc, img, src, remote, true))
 
     if (REMOTE.test(src)) {
-      remoteCount++
+      remoteUrls.add(src)
       if (!opts.allowRemote) {
         fail(true)
+        return
+      }
+      if (opts.deferLoads) {
+        pending(true)
         return
       }
       jobs.push(safeRead(opts.readRemote, src).then((r) => (r ? succeed(r) : fail(true))))
@@ -111,9 +146,39 @@ export async function resolveMarkdownImages(
       fail(false)
       return
     }
+    if (opts.deferLoads) {
+      pending(false)
+      return
+    }
     jobs.push(safeRead(opts.readLocal, abs).then((r) => (r ? succeed(r) : fail(false))))
   })
 
   await Promise.all(jobs)
-  return { html: doc.body.innerHTML, remoteCount }
+  return { html: doc.body.innerHTML, remoteUrls: [...remoteUrls] }
+}
+
+/** How long image reads may take before the text is shown with "loading" boxes first. */
+export const IMAGE_QUICK_MS = 150
+
+/**
+ * Resolves images, but never holds the document text back on slow reads: if they aren't
+ * done within `quickMs`, `onPending` first gets a version whose images are loading boxes.
+ * Warm caches (re-renders of the same document) finish in time and render once.
+ */
+export async function resolveMarkdownImagesProgressive(
+  html: string,
+  opts: ImageResolveOptions,
+  onPending: (r: ImageResult) => void,
+  quickMs = IMAGE_QUICK_MS
+): Promise<ImageResult> {
+  const full = resolveMarkdownImages(html, opts)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const slow = new Promise<'slow'>((r) => {
+    timer = setTimeout(() => r('slow'), quickMs)
+  })
+  const first = await Promise.race([full, slow])
+  clearTimeout(timer)
+  if (first !== 'slow') return first
+  onPending(await resolveMarkdownImages(html, { ...opts, deferLoads: true }))
+  return full
 }

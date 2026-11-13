@@ -106,7 +106,8 @@ export function isImageMime(mime: string): boolean {
 
 /** Repo-relative, forward-slash path of absPath under root; null if it is the root or escapes it. */
 export function relForBase(root: string, absPath: string): string | null {
-  const rel = relative(root, resolve(absPath))
-  if (!rel || isAbsolute(rel) || rel.startsWith('..')) return null
-  return rel.split('\\').join('/')
+  const abs = resolve(absPath)
+  if (!isInsideRoot(abs, root)) return null
+  const rel = relative(root, abs)
+  return rel ? rel.split('\\').join('/') : null
 }

@@ -188,19 +188,25 @@ export default function ContentPane({
     }
   }, [file, mode, selection, refreshKey])
 
-  // Readers are cached per file + refresh so repeated/concurrent image reads share one IPC call.
+  // Readers are cached per file, baseline and document text, so repeated/concurrent image
+  // reads share one IPC call. Keyed on the text (not refreshKey): an unrelated change
+  // elsewhere in the repo must not re-render the document and re-read every image.
+  // Editing the .md re-reads its images; an image edited on its own shows on reopen.
   const absPathKey = file?.absPath ?? null
+  const docText = content?.kind === 'text' ? content.content : null
   const localReaders = useMemo(
     () => ({
       disk: cachedReader((p: string) => window.viewmaster.readResource(p)),
       baseline: cachedReader((p: string) => window.viewmaster.readBaseResource(p))
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [absPathKey, refreshKey, baselineKey]
+    [absPathKey, docText, baselineKey]
   )
   // Remote cache survives an on-disk refresh of the same file (keyed on absPath only).
+  // Failures aren't kept, so a re-render after a network blip tries again.
   const remoteReader = useMemo(
-    () => cachedReader((u: string) => window.viewmaster.fetchRemoteImage(u)),
+    () =>
+      cachedReader((u: string) => window.viewmaster.fetchRemoteImage(u), { retryFailures: true }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [absPathKey]
   )

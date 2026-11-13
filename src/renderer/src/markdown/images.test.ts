@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
-import { cachedReader, resolveMarkdownImages, type ImageResolveOptions } from './images'
+import {
+  cachedReader,
+  resolveMarkdownImages,
+  resolveMarkdownImagesProgressive,
+  type ImageResolveOptions
+} from './images'
 
 const OK = { base64: 'QUJD', mime: 'image/svg+xml' }
 
@@ -89,14 +94,14 @@ describe('resolveMarkdownImages', () => {
     const html = '<img src="https://e.com/a.png"><img src="http://e.com/b.png"><img src="l.png">'
     const blocked = setup()
     const out = await resolveMarkdownImages(html, blocked.opts)
-    expect(out.remoteCount).toBe(2)
+    expect(out.remoteUrls.length).toBe(2)
     expect(dom(out.html).querySelectorAll('.md-img-remote').length).toBe(2)
     expect(blocked.readRemote).not.toHaveBeenCalled()
 
     const allowed = setup({ allowRemote: true })
     const out2 = await resolveMarkdownImages(html, allowed.opts)
     expect(allowed.readRemote).toHaveBeenCalledTimes(2)
-    expect(out2.remoteCount).toBe(2)
+    expect(out2.remoteUrls.length).toBe(2)
     const srcs = [...dom(out2.html).querySelectorAll('img')].map((i) => i.getAttribute('src'))
     expect(srcs.every((s) => s!.startsWith('data:'))).toBe(true)
     expect(dom(out2.html).querySelector('.md-img-missing')).toBeNull()
@@ -190,5 +195,78 @@ describe('cachedReader', () => {
     await c('y')
     expect(a).toBe(b)
     expect(read).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('remote URL counting', () => {
+  it('counts each distinct remote URL once', async () => {
+    const { opts } = setup()
+    const out = await resolveMarkdownImages(
+      '<img src="https://x/a.png"><img src="https://x/a.png"><img src="https://x/b.png">',
+      opts
+    )
+    expect(out.remoteUrls).toEqual(['https://x/a.png', 'https://x/b.png'])
+  })
+})
+
+describe('deferLoads', () => {
+  it('makes loading boxes without reading anything', async () => {
+    const { opts, readLocal, readRemote } = setup({ allowRemote: true, deferLoads: true })
+    const out = await resolveMarkdownImages('<img src="a.png"><img src="https://x/r.png">', opts)
+    expect(readLocal).not.toHaveBeenCalled()
+    expect(readRemote).not.toHaveBeenCalled()
+    expect(dom(out.html).querySelectorAll('.md-img-loading')).toHaveLength(2)
+  })
+})
+
+describe('resolveMarkdownImagesProgressive', () => {
+  it('fast reads render once, without a pending version', async () => {
+    const { opts } = setup()
+    const onPending = vi.fn()
+    const out = await resolveMarkdownImagesProgressive('<p>t</p><img src="a.png">', opts, onPending, 50)
+    expect(onPending).not.toHaveBeenCalled()
+    expect(dom(out.html).querySelector('img')?.getAttribute('src')).toMatch(/^data:/)
+  })
+
+  it('slow reads show the text with loading boxes first', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const { opts } = setup({
+      readLocal: async () => {
+        await gate
+        return OK
+      }
+    })
+    const onPending = vi.fn()
+    const done = resolveMarkdownImagesProgressive('<p>text</p><img src="a.png">', opts, onPending, 10)
+    await vi.waitFor(() => expect(onPending).toHaveBeenCalledTimes(1))
+    const pending = dom(onPending.mock.calls[0][0].html)
+    expect(pending.querySelector('p')?.textContent).toBe('text')
+    expect(pending.querySelector('.md-img-loading')).not.toBeNull()
+    release()
+    const out = await done
+    expect(dom(out.html).querySelector('img')?.getAttribute('src')).toMatch(/^data:/)
+  })
+})
+
+describe('cachedReader retryFailures', () => {
+  it('retries a key whose read failed or returned null', async () => {
+    let n = 0
+    const read = vi.fn(async () => (++n === 1 ? null : OK))
+    const c = cachedReader(read, { retryFailures: true })
+    expect(await c('u')).toBeNull()
+    await Promise.resolve()
+    expect(await c('u')).toEqual(OK)
+    expect(await c('u')).toEqual(OK)
+    expect(read).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps failures cached by default', async () => {
+    const read = vi.fn(async () => null)
+    const c = cachedReader(read)
+    await c('u')
+    await Promise.resolve()
+    await c('u')
+    expect(read).toHaveBeenCalledTimes(1)
   })
 })

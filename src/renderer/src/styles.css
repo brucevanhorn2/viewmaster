@@ -1102,6 +1102,9 @@ body {
   border-radius: 4px;
   font-size: 12px;
 }
+.md-img-loading {
+  opacity: 0.6;
+}
 .md-img-missing-alt {
   display: block;
   color: var(--fg);

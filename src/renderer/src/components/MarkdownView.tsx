@@ -5,7 +5,7 @@ import { useDocumentPanZoom } from '../markdown/useDocumentPanZoom'
 import { composeMarks } from '../markdown/marksDiff'
 import { classifyLinkHref } from '../markdown/links'
 import { scrollToId } from '../markdown/scrollToId'
-import { resolveMarkdownImages } from '../markdown/images'
+import { resolveMarkdownImages, resolveMarkdownImagesProgressive, type ImageResult } from '../markdown/images'
 import type { ResourceReader } from '../html/render'
 import RemoteImagesBar from './RemoteImagesBar'
 
@@ -68,29 +68,29 @@ export default function MarkdownView({
 
     // Images resolve against the rendered HTML; a stale result (file/content/allowance
     // changed meanwhile) is discarded by the same flag as the render itself.
-    const withImages = async (rendered: string): Promise<{ html: string; remoteCount: number }> => {
+    const imageOpts = { docAbsPath: absPath, workspaceRoot, readLocal, readRemote, allowRemote }
+    const show = (r: ImageResult): void => {
+      if (stale) return
+      htmlForPath.current = absPath
+      setRemoteInfo({ path: absPath, count: r.remoteUrls.length })
+      setHtml(r.html)
+    }
+    const withImages = async (rendered: string): Promise<ImageResult> => {
       try {
-        return await resolveMarkdownImages(rendered, {
-          docAbsPath: absPath,
-          workspaceRoot,
-          readLocal,
-          readRemote,
-          allowRemote
-        })
+        return await resolveMarkdownImages(rendered, imageOpts)
       } catch {
-        return { html: rendered, remoteCount: 0 }
+        return { html: rendered, remoteUrls: [] }
       }
     }
 
     render()
-      .then(withImages)
-      .then((r) => {
-        if (!stale) {
-          htmlForPath.current = absPath
-          setRemoteInfo({ path: absPath, count: r.remoteCount })
-          setHtml(r.html)
-        }
-      })
+      // Slow image reads never hold the text back: it shows first with loading boxes.
+      .then((rendered) =>
+        resolveMarkdownImagesProgressive(rendered, imageOpts, show).catch(
+          (): ImageResult => ({ html: rendered, remoteUrls: [] })
+        )
+      )
+      .then(show)
       .catch(async (err: unknown) => {
         if (stale) return
         const message = err instanceof Error ? err.message : String(err)
@@ -100,7 +100,7 @@ export default function MarkdownView({
             const plain = await withImages(await renderMarkdown(content))
             if (!stale) {
               htmlForPath.current = absPath
-              setRemoteInfo({ path: absPath, count: plain.remoteCount })
+              setRemoteInfo({ path: absPath, count: plain.remoteUrls.length })
               setHtml(`<p><em>Marks unavailable: ${escapeHtml(message)}</em></p>${plain.html}`)
             }
             return

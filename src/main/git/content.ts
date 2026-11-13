@@ -6,7 +6,6 @@ import { runGit } from './run'
 import { MAX_RESOURCE_SIZE } from '../files/resource'
 
 export const MAX_SIZE = 2 * 1024 * 1024
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024
 const MAX_PDF_SIZE = 25 * 1024 * 1024
 export const BINARY_SNIFF_BYTES = 8192
 
@@ -43,7 +42,7 @@ export async function readCurrentFile(absPath: string): Promise<FileContent> {
 
   const rasterMime = RASTER_IMAGE_MIME[extname(absPath).toLowerCase()]
   if (rasterMime) {
-    if (size > MAX_IMAGE_SIZE) return { kind: 'too-large', size }
+    if (size > MAX_RESOURCE_SIZE) return { kind: 'too-large', size }
     try {
       const buffer = await readFile(absPath)
       return { kind: 'image', mime: rasterMime, base64: buffer.toString('base64') }
@@ -103,10 +102,13 @@ function gitBuffer(root: string, args: string[]): Promise<Buffer | null> {
   })
 }
 
+const LFS_POINTER = Buffer.from('version https://git-lfs.github.com/spec/')
+
 /**
  * Raw bytes of `<base>:<relPath>` when that object is a blob. Null when there
  * is no baseline, the path is missing or not a blob (e.g. a directory), git
- * fails, or the blob exceeds MAX_RESOURCE_SIZE.
+ * fails, the blob exceeds MAX_RESOURCE_SIZE, or it is a Git LFS pointer (the
+ * real bytes aren't in git, so the caller shows a placeholder, not a broken image).
  */
 export async function readBaseBlob(
   root: string,
@@ -114,10 +116,9 @@ export async function readBaseBlob(
   relPath: string
 ): Promise<Buffer | null> {
   if (!base) return null
-  const spec = `${base}:${relPath}`
-  const type = await gitBuffer(root, ['cat-file', '-t', spec])
-  if (!type || type.toString('utf8').trim() !== 'blob') return null
-  const buf = await gitBuffer(root, ['show', spec])
+  // `cat-file blob` fails for trees and missing paths, so one process does both checks.
+  const buf = await gitBuffer(root, ['cat-file', 'blob', `${base}:${relPath}`])
   if (!buf || buf.length > MAX_RESOURCE_SIZE) return null
+  if (buf.subarray(0, LFS_POINTER.length).equals(LFS_POINTER)) return null
   return buf
 }

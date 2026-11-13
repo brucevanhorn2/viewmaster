@@ -34,6 +34,15 @@ import { createLspManager, type LspManager } from './lsp/manager'
 import { languageForPath } from './lsp/translate'
 
 const RECOMPUTE_DEBOUNCE_MS = 300
+
+/**
+ * The git ref a baseline diffs against. Shared by file:readBase and file:readBaseResource
+ * so a document's text and its images always come from the same revision. In
+ * working-only mode it's HEAD, so staged/modified files still have an old side.
+ */
+function baselineRef(baseline: BaselineKind): string {
+  return baseline.kind === 'merge-base' ? baseline.base : baseline.kind === 'custom' ? baseline.ref : 'HEAD'
+}
 // Changed files are forwarded to running language servers in batches.
 const LSP_NOTIFY_BATCH_MS = 200
 
@@ -377,9 +386,8 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
   ipcMain.handle('file:readBase', async (_e, relPath: string): Promise<string> => {
     if (!session || !session.baseline) return ''
     const { root, baseline } = session
-    // In working-only mode diff against HEAD (if any) so staged/modified
-    // files still have a meaningful old side; untracked paths yield ''.
-    const base = baseline.kind === 'merge-base' ? baseline.base : baseline.kind === 'custom' ? baseline.ref : 'HEAD'
+    // Untracked paths yield ''.
+    const base = baselineRef(baseline)
     return readBaseFile(root, base, relPath)
   })
 
@@ -397,7 +405,7 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
       if (rel === null) return null
       const mime = mimeFor(rel)
       if (!isImageMime(mime)) return null
-      const base = baseline.kind === 'merge-base' ? baseline.base : baseline.kind === 'custom' ? baseline.ref : 'HEAD'
+      const base = baselineRef(baseline)
       const buf = await readBaseBlob(root, base, rel)
       return buf ? { base64: buf.toString('base64'), mime } : null
     }

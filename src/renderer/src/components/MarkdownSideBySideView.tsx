@@ -4,7 +4,7 @@ import { renderMarkdownToHtml } from '../markdown/render'
 import { useDocumentPanZoom } from '../markdown/useDocumentPanZoom'
 import { classifyLinkHref } from '../markdown/links'
 import { scrollToId } from '../markdown/scrollToId'
-import { resolveMarkdownImages } from '../markdown/images'
+import { resolveMarkdownImagesProgressive, type ImageResult } from '../markdown/images'
 import RemoteImagesBar from './RemoteImagesBar'
 import type { MarkdownImages } from './MarkdownView'
 
@@ -14,37 +14,31 @@ function usePaneHtml(
   pathKey: string,
   workspaceRoot: string,
   images: MarkdownImages
-): [string, React.RefObject<HTMLDivElement | null>, React.RefObject<string | null>, number] {
+): [string, React.RefObject<HTMLDivElement | null>, React.RefObject<string | null>, string[]] {
   const ref = useRef<HTMLDivElement>(null)
   const [html, setHtml] = useState('')
-  const [remoteInfo, setRemoteInfo] = useState<{ path: string; count: number } | null>(null)
-  const remoteCount = remoteInfo?.path === pathKey ? remoteInfo.count : 0
+  const [remoteInfo, setRemoteInfo] = useState<{ path: string; urls: string[] } | null>(null)
+  const remoteUrls = remoteInfo?.path === pathKey ? remoteInfo.urls : NO_URLS
   const htmlForKey = useRef<string | null>(null)
   const { readLocal, readRemote, allowRemote } = images
 
   useEffect(() => {
     let stale = false
+    const show = (r: ImageResult): void => {
+      if (stale) return
+      htmlForKey.current = pathKey
+      setRemoteInfo({ path: pathKey, urls: r.remoteUrls })
+      setHtml(r.html)
+    }
     void renderMarkdownToHtml(source)
-      .then(async (rendered) => {
-        try {
-          return await resolveMarkdownImages(rendered, {
-            docAbsPath: pathKey,
-            workspaceRoot,
-            readLocal,
-            readRemote,
-            allowRemote
-          })
-        } catch {
-          return { html: rendered, remoteCount: 0 }
-        }
-      })
-      .then((r) => {
-        if (!stale) {
-          htmlForKey.current = pathKey
-          setRemoteInfo({ path: pathKey, count: r.remoteCount })
-          setHtml(r.html)
-        }
-      })
+      .then((rendered) =>
+        resolveMarkdownImagesProgressive(
+          rendered,
+          { docAbsPath: pathKey, workspaceRoot, readLocal, readRemote, allowRemote },
+          show
+        ).catch((): ImageResult => ({ html: rendered, remoteUrls: [] }))
+      )
+      .then(show)
     return () => {
       stale = true
     }
@@ -52,8 +46,10 @@ function usePaneHtml(
 
   useDocumentPanZoom(ref, html, pathKey)
 
-  return [html, ref, htmlForKey, remoteCount]
+  return [html, ref, htmlForKey, remoteUrls]
 }
+
+const NO_URLS: string[] = []
 
 /**
  * Renders `baseContent` and `content` as two independent, fully-rendered
@@ -87,8 +83,8 @@ export default function MarkdownSideBySideView({
   oldImages: MarkdownImages
   newImages: MarkdownImages
 }): React.JSX.Element {
-  const [oldHtml, oldRef, , oldCount] = usePaneHtml(baseContent, absPath, workspaceRoot, oldImages)
-  const [newHtml, newRef, newHtmlForPath, newCount] = usePaneHtml(
+  const [oldHtml, oldRef, , oldUrls] = usePaneHtml(baseContent, absPath, workspaceRoot, oldImages)
+  const [newHtml, newRef, newHtmlForPath, newUrls] = usePaneHtml(
     content,
     absPath,
     workspaceRoot,
@@ -202,7 +198,11 @@ export default function MarkdownSideBySideView({
 
   return (
     <div className="markdown-sidebyside-wrap">
-      <RemoteImagesBar count={newImages.allowRemote ? 0 : oldCount + newCount} onLoad={newImages.onAllowRemote} />
+      {/* The same URL in both versions counts once. */}
+      <RemoteImagesBar
+        count={newImages.allowRemote ? 0 : new Set([...oldUrls, ...newUrls]).size}
+        onLoad={newImages.onAllowRemote}
+      />
       <div className="markdown-sidebyside">
         <div ref={oldScrollRef} className="markdown-sidebyside-pane">
           {/* Old-pane links are inert: this handler swallows anchor clicks (needed since a
