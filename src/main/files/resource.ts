@@ -94,10 +94,12 @@ const IMAGE_MIMES = new Set([
   'image/svg+xml',
   'image/bmp',
   'image/x-icon',
+  'image/vnd.microsoft.icon',
+  'image/jpg',
   'image/avif'
 ])
 
-/** True for exactly the image MIME types `mimeFor` can produce. */
+/** True for the image MIME types mimeFor produces, plus common server aliases (image/jpg, image/vnd.microsoft.icon). */
 export function isImageMime(mime: string): boolean {
   return IMAGE_MIMES.has(mime)
 }

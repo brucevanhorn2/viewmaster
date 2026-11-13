@@ -45,4 +45,41 @@ describe('fetchRemoteImage', () => {
     expect(await fetchRemoteImage('not a url', f)).toBeNull()
     expect(f).not.toHaveBeenCalled()
   })
+
+  it('fetchRemoteImage aborts a streaming body without content-length that exceeds the cap', async () => {
+    let pulled = 0
+    let cancelled = false
+    const chunk = new Uint8Array(1024 * 1024)
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++
+        if (pulled > 100) return controller.close()
+        controller.enqueue(chunk)
+      },
+      cancel() {
+        cancelled = true
+      }
+    })
+    const f = vi.fn(async () => new Response(stream, { headers: { 'content-type': 'image/png' } })) as unknown as typeof fetch
+    expect(await fetchRemoteImage('https://e.com/x', f)).toBeNull()
+    expect(cancelled).toBe(true)
+    expect(pulled).toBeLessThan(20)
+  })
+
+  it('fetchRemoteImage accepts ico/jpg aliases and mixed-case content types', async () => {
+    const body = new Uint8Array([1, 2])
+    const b64 = Buffer.from(body).toString('base64')
+    expect(await fetchRemoteImage('https://e.com/x', fakeFetch(body, { type: 'image/vnd.microsoft.icon' }))).toEqual({
+      mime: 'image/vnd.microsoft.icon',
+      base64: b64
+    })
+    expect(await fetchRemoteImage('https://e.com/x', fakeFetch(body, { type: 'image/jpg' }))).toEqual({
+      mime: 'image/jpg',
+      base64: b64
+    })
+    expect(await fetchRemoteImage('https://e.com/x', fakeFetch(body, { type: 'IMAGE/PNG' }))).toEqual({
+      mime: 'image/png',
+      base64: b64
+    })
+  })
 })

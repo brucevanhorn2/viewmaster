@@ -26,10 +26,29 @@ export async function fetchRemoteImage(
     if (!isImageMime(mime)) return null
     const declared = Number(res.headers.get('content-length'))
     if (Number.isFinite(declared) && declared > MAX_RESOURCE_SIZE) return null
-    const buf = Buffer.from(await res.arrayBuffer())
-    if (buf.length > MAX_RESOURCE_SIZE) return null
+    const buf = await readCapped(res, MAX_RESOURCE_SIZE)
+    if (!buf) return null
     return { base64: buf.toString('base64'), mime }
   } catch {
     return null
   }
+}
+
+/** Reads a response body, cancelling and returning null once it exceeds `max` bytes. */
+async function readCapped(res: Response, max: number): Promise<Buffer | null> {
+  if (!res.body) return null
+  const reader = res.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.byteLength
+    if (total > max) {
+      await reader.cancel().catch(() => undefined)
+      return null
+    }
+    chunks.push(value)
+  }
+  return Buffer.concat(chunks, total)
 }
