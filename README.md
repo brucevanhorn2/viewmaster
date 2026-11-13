@@ -74,6 +74,10 @@ introduced — not just what happens to differ from the tip of `main`.
   imports, what imports it, and what references its declared symbols —
   even files untouched by the current branch.
 
+### Upgrading from View Master
+On first launch, Second Look copies your recent folders and local history from
+View Master, its previous name. The old folder is left in place.
+
 ## Tech stack
 
 Electron + TypeScript + React, with Monaco (code + diffs), markdown-it + mermaid +
@@ -124,9 +128,11 @@ In CI, supply the certificate with `CSC_LINK` (base64-encoded `.p12`) and
 `CSC_KEY_PASSWORD` instead of a keychain, along with the three `APPLE_*`
 variables above.
 
-For a local build without signing or notarization:
+For a local build without signing or notarization (electron-builder packages
+`out/` and does not compile, so build first):
 
 ```bash
+npm run build
 npx electron-builder --mac -c.mac.identity=null -c.mac.notarize=false
 ```
 
@@ -135,9 +141,6 @@ and choose **Open** to run it.
 
 Second Look shells out to the system `git`, so Git or the Xcode Command Line
 Tools must be installed.
-
-On first launch, Second Look copies your recent folders and local history from
-View Master, its previous name. The old folder is left in place.
 
 ## Roadmap
 

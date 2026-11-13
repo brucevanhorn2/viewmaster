@@ -31,14 +31,25 @@ export function migrateLegacyUserData(opts: {
     let result: MigrationResult = 'migrated'
     try {
       mkdirSync(userDataDir, { recursive: true })
+    } catch (err) {
+      console.error('[secondlook:migrate] could not create userData folder:', err)
+      result = 'failed'
+    }
+    // Each copy is independent: a history failure must not skip config.json.
+    try {
       if (existsSync(join(legacyDir, 'history'))) {
         cpSync(join(legacyDir, 'history'), join(userDataDir, 'history'), { recursive: true })
       }
+    } catch (err) {
+      console.error('[secondlook:migrate] history copy failed:', err)
+      result = 'failed'
+    }
+    try {
       if (existsSync(join(legacyDir, 'config.json'))) {
         copyFileSync(join(legacyDir, 'config.json'), join(userDataDir, 'config.json'))
       }
     } catch (err) {
-      console.error('[secondlook:migrate] copy failed:', err)
+      console.error('[secondlook:migrate] config copy failed:', err)
       result = 'failed'
     }
     try {
