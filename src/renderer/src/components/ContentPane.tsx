@@ -277,7 +277,7 @@ export default function ContentPane({
         />
       )
   } else if (content.kind === 'image') {
-    body = <ImageView src={rasterDataUrl(content.mime, content.base64)} />
+    body = <ImageView src={rasterDataUrl(content.mime, content.base64)} resetKey={file.absPath} />
   } else if (content.kind === 'binary') {
     body = <Placeholder title="Binary file" detail="Not displayed" />
   } else if (content.kind === 'too-large') {
@@ -294,7 +294,7 @@ export default function ContentPane({
   } else if (isSvg(file.path) && mode === 'code') {
     body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} />
   } else if (isSvg(file.path)) {
-    body = <ImageView src={svgDataUrl(content.content)} />
+    body = <ImageView src={svgDataUrl(content.content)} resetKey={file.absPath} />
   } else if (mode === 'code' && isMarkdown(file.path)) {
     body = <CodeView fileName={fileName} absPath={file.absPath} content={content.content} revealLine={lineTarget} />
   } else if (isMarkdown(file.path)) {

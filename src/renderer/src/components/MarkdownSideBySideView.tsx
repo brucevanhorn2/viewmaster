@@ -1,7 +1,7 @@
 // src/renderer/src/components/MarkdownSideBySideView.tsx
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { renderMarkdownToHtml } from '../markdown/render'
-import { runMermaidIn } from '../markdown/mermaidRunner'
+import { useDocumentPanZoom } from '../markdown/useDocumentPanZoom'
 import { classifyLinkHref } from '../markdown/links'
 import { scrollToId } from '../markdown/scrollToId'
 
@@ -27,11 +27,7 @@ function usePaneHtml(
     }
   }, [source, pathKey])
 
-  useEffect(() => {
-    const container = ref.current
-    if (!container || !html) return
-    runMermaidIn(container)
-  }, [html])
+  useDocumentPanZoom(ref, html, pathKey)
 
   return [html, ref, htmlForKey]
 }
@@ -66,6 +62,9 @@ export default function MarkdownSideBySideView({
 }): React.JSX.Element {
   const [oldHtml, oldRef] = usePaneHtml(baseContent, absPath)
   const [newHtml, newRef, newHtmlForPath] = usePaneHtml(content, absPath)
+  // Stable prop objects (see MarkdownView): avoid innerHTML re-assignment on re-render.
+  const oldInner = useMemo(() => ({ __html: oldHtml }), [oldHtml])
+  const newInner = useMemo(() => ({ __html: newHtml }), [newHtml])
   const oldScrollRef = useRef<HTMLDivElement>(null)
   const newScrollRef = useRef<HTMLDivElement>(null)
 
@@ -172,17 +171,24 @@ export default function MarkdownSideBySideView({
   return (
     <div className="markdown-sidebyside">
       <div ref={oldScrollRef} className="markdown-sidebyside-pane">
-        {/* No onClick handler here -- this omission is the actual enforcement that
-            old-pane links are inert; the CSS pointer-events:none rule is only for
-            visual affordance (no cursor/hover), not the mechanism itself. */}
-        <div ref={oldRef} className="markdown-body" dangerouslySetInnerHTML={{ __html: oldHtml }} />
+        {/* Old-pane links are inert: this handler swallows anchor clicks (needed since a
+            pan/zoom box inside a link re-enables pointer events), and the CSS
+            pointer-events:none rule removes the link cursor/hover. */}
+        <div
+          ref={oldRef}
+          className="markdown-body"
+          dangerouslySetInnerHTML={oldInner}
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest('a')) e.preventDefault()
+          }}
+        />
       </div>
       <div ref={newScrollRef} className="markdown-sidebyside-pane markdown-sidebyside-pane-new">
         <div
           ref={newRef}
           className="markdown-body"
           onClick={onNewPaneClick}
-          dangerouslySetInnerHTML={{ __html: newHtml }}
+          dangerouslySetInnerHTML={newInner}
         />
       </div>
     </div>

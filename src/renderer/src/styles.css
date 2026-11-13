@@ -521,6 +521,13 @@ body {
   cursor: pointer;
 }
 
+/* A linked diagram/image in the old pane must still pan and zoom (the link stays inert:
+   the old pane's click handler swallows anchor clicks). */
+.markdown-sidebyside-pane:not(.markdown-sidebyside-pane-new) .markdown-body a .pz-doc {
+  pointer-events: auto;
+  cursor: grab;
+}
+
 /* ---- rendered html ---- */
 
 .html-scroll {
@@ -719,12 +726,16 @@ body {
 .image-view {
   height: 100%;
   overflow: auto;
+}
+
+/* Unattached (pan/zoom could not attach): keep the plain centered look. */
+.image-view:not(.pz-viewport) {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.image-view img {
+.image-view:not(.pz-viewport) img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -997,4 +1008,79 @@ body {
   user-select: text;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* ---- pan/zoom ---- */
+.pz-viewport {
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+}
+.pz-viewport.pz-dragging {
+  cursor: grabbing;
+}
+.pz-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  max-width: none;
+  max-height: none;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+.pz-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--fg);
+  cursor: default;
+  user-select: none;
+}
+.pz-controls button {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.pz-controls button:hover {
+  background: var(--bg-hover);
+}
+.pz-controls [data-pz="pct"] {
+  min-width: 40px;
+  text-align: center;
+  color: var(--fg-dim);
+}
+.pz-hover .pz-controls {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.pz-hover.pz-viewport:hover .pz-controls,
+.pz-hover.pz-viewport:focus-within .pz-controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Pan/zoom box around a diagram/image in rendered markdown: the element's size and aspect at
+   attach time (no layout jump), shrinking/growing with the pane up to its preferred width. */
+.pz-doc {
+  display: block;
+  max-width: 100%;
+}
+.pz-doc.pz-doc-inline {
+  display: inline-block;
 }

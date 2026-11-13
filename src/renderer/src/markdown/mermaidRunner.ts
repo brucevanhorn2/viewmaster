@@ -28,9 +28,9 @@ let queue: Promise<void> = Promise.resolve()
  * collisions/corrupted diagrams) matters more than the render-time cost of
  * one extra concurrently-open view with diagrams.
  */
-export function runMermaidIn(container: HTMLElement): void {
+export function runMermaidIn(container: HTMLElement): Promise<void> {
   const nodes = Array.from(container.querySelectorAll<HTMLElement>('pre.mermaid'))
-  if (nodes.length === 0) return
+  if (nodes.length === 0) return Promise.resolve()
   queue = queue.then(async () => {
     for (const node of nodes) {
       if (node.dataset.mermaidProcessed) continue
@@ -53,4 +53,5 @@ export function runMermaidIn(container: HTMLElement): void {
       }
     }
   })
+  return queue
 }
