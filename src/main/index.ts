@@ -1,3 +1,4 @@
+import './migrateOnLoad'
 import { app, BrowserWindow, Menu, dialog, shell } from 'electron'
 import { join, dirname } from 'path'
 import { registerIpc, disposeIpc } from './ipc'
