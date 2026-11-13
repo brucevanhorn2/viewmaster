@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, net, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, session as electronSession, shell } from 'electron'
 import type { FSWatcher } from 'fs'
 import { realpath } from 'fs/promises'
 import { join, relative, resolve } from 'path'
@@ -34,6 +34,12 @@ import { createLspManager, type LspManager } from './lsp/manager'
 import { languageForPath } from './lsp/translate'
 
 const RECOMPUTE_DEBOUNCE_MS = 300
+
+let remoteImageSessionInstance: Electron.Session | null = null
+function remoteImageSession(): Electron.Session {
+  remoteImageSessionInstance ??= electronSession.fromPartition('remote-images', { cache: false })
+  return remoteImageSessionInstance
+}
 
 /**
  * The git ref a baseline diffs against. Shared by file:readBase and file:readBaseResource
@@ -414,7 +420,9 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
   ipcMain.handle(
     'file:fetchRemoteImage',
     (_e, url: string): Promise<{ base64: string; mime: string } | null> =>
-      fetchRemoteImage(url, net.fetch as typeof fetch)
+      // A separate in-memory session: no cookies or credentials from the app's own session.
+      // Called as a method: an unbound session.fetch silently falls back to the default session.
+      fetchRemoteImage(url, ((input: string, init?: RequestInit) => remoteImageSession().fetch(input, init)) as typeof fetch)
   )
 
   ipcMain.handle('app:recentFolders', (): string[] => getRecentFolders())

@@ -194,11 +194,13 @@ export default function ContentPane({
   // Editing the .md re-reads its images; an image edited on its own shows on reopen.
   const absPathKey = file?.absPath ?? null
   const docText = content?.kind === 'text' ? content.content : null
-  const localReaders = useMemo(
-    () => ({
-      disk: cachedReader((p: string) => window.viewmaster.readResource(p)),
-      baseline: cachedReader((p: string) => window.viewmaster.readBaseResource(p))
-    }),
+  const diskReader = useMemo(
+    () => cachedReader((p: string) => window.viewmaster.readResource(p)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [absPathKey, docText]
+  )
+  const baselineReader = useMemo(
+    () => cachedReader((p: string) => window.viewmaster.readBaseResource(p)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [absPathKey, docText, baselineKey]
   )
@@ -210,7 +212,7 @@ export default function ContentPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [absPathKey]
   )
-  const readers = { ...localReaders, remote: remoteReader }
+  const readers = { disk: diskReader, baseline: baselineReader, remote: remoteReader }
   const [allowRemote, allowRemoteNow] = useRemoteAllowance(absPathKey)
   const imagesFor = (read: typeof readers.disk): MarkdownImages => ({
     readLocal: read,

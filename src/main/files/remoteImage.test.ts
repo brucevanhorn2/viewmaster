@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { fetchRemoteImage } from './remoteImage'
+import { fetchRemoteImage, isPrivateHost } from './remoteImage'
 
 function fakeFetch(body: Uint8Array, init: { status?: number; type?: string; headers?: Record<string, string> } = {}) {
   return vi.fn(async () =>
@@ -81,5 +81,38 @@ describe('fetchRemoteImage', () => {
       mime: 'image/png',
       base64: b64
     })
+  })
+})
+
+describe('isPrivateHost', () => {
+  it.each([
+    'localhost',
+    'foo.localhost',
+    '127.0.0.1',
+    '10.1.2.3',
+    '172.16.0.1',
+    '172.31.255.255',
+    '192.168.1.1',
+    '169.254.169.254',
+    '100.64.0.1',
+    '0.0.0.0',
+    '[::1]',
+    '[::]',
+    '[fe80::1]',
+    '[fd00::1]',
+    '[::ffff:192.168.0.1]',
+    '[::ffff:7f00:1]'
+  ])('blocks %s', (h) => expect(isPrivateHost(h)).toBe(true))
+
+  it.each(['img.shields.io', '8.8.8.8', '172.32.0.1', '192.169.0.1', '[2606:4700::1111]', '[::ffff:808:808]'])(
+    'allows %s',
+    (h) => expect(isPrivateHost(h)).toBe(false)
+  )
+
+  it('fetchRemoteImage refuses private hosts without fetching', async () => {
+    const f = vi.fn() as unknown as typeof fetch
+    expect(await fetchRemoteImage('http://192.168.1.1/admin/reboot?x.png', f)).toBeNull()
+    expect(await fetchRemoteImage('http://[::ffff:127.0.0.1]:8080/a.png', f)).toBeNull()
+    expect(f).not.toHaveBeenCalled()
   })
 })

@@ -69,9 +69,11 @@ export default function MarkdownView({
     // Images resolve against the rendered HTML; a stale result (file/content/allowance
     // changed meanwhile) is discarded by the same flag as the render itself.
     const imageOpts = { docAbsPath: absPath, workspaceRoot, readLocal, readRemote, allowRemote }
-    const show = (r: ImageResult): void => {
+    // `ready` is false for the interim loading-boxes render: images will still change the
+    // layout, so a pending heading anchor must wait for the final render to scroll.
+    const show = (r: ImageResult, ready = true): void => {
       if (stale) return
-      htmlForPath.current = absPath
+      htmlForPath.current = ready ? absPath : null
       setRemoteInfo({ path: absPath, count: r.remoteUrls.length })
       setHtml(r.html)
     }
@@ -86,11 +88,11 @@ export default function MarkdownView({
     render()
       // Slow image reads never hold the text back: it shows first with loading boxes.
       .then((rendered) =>
-        resolveMarkdownImagesProgressive(rendered, imageOpts, show).catch(
+        resolveMarkdownImagesProgressive(rendered, imageOpts, (r) => show(r, false)).catch(
           (): ImageResult => ({ html: rendered, remoteUrls: [] })
         )
       )
-      .then(show)
+      .then((r) => show(r))
       .catch(async (err: unknown) => {
         if (stale) return
         const message = err instanceof Error ? err.message : String(err)

@@ -24,9 +24,11 @@ function usePaneHtml(
 
   useEffect(() => {
     let stale = false
-    const show = (r: ImageResult): void => {
+    // Interim loading-boxes render: leave htmlForKey unset so an anchor scroll waits for
+    // the final layout.
+    const show = (r: ImageResult, ready = true): void => {
       if (stale) return
-      htmlForKey.current = pathKey
+      htmlForKey.current = ready ? pathKey : null
       setRemoteInfo({ path: pathKey, urls: r.remoteUrls })
       setHtml(r.html)
     }
@@ -35,10 +37,10 @@ function usePaneHtml(
         resolveMarkdownImagesProgressive(
           rendered,
           { docAbsPath: pathKey, workspaceRoot, readLocal, readRemote, allowRemote },
-          show
+          (r) => show(r, false)
         ).catch((): ImageResult => ({ html: rendered, remoteUrls: [] }))
       )
-      .then(show)
+      .then((r) => show(r))
     return () => {
       stale = true
     }
