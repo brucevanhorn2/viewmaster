@@ -1,7 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, net, shell } from 'electron'
 import type { FSWatcher } from 'fs'
 import { realpath } from 'fs/promises'
-import { isAbsolute, join, relative, resolve } from 'path'
+import { join, relative, resolve } from 'path'
 import type {
   BaselineKind,
   ExternalKind,
@@ -24,7 +24,7 @@ import { createRecorder, type Recorder } from './history/recorder'
 import { historyPaths } from './history/paths'
 import { getObject, readVersions } from './history/store'
 import { browseFiles, listFolderTree, listGitTree, toUnchangedFiles } from './files/browse'
-import { isImageMime, mimeFor, readResource, resolveWithinRoot } from './files/resource'
+import { isImageMime, mimeFor, readResource, relForBase, resolveWithinRoot } from './files/resource'
 import { fetchRemoteImage } from './files/remoteImage'
 import { searchFiles } from './search/scan'
 import { looksLikeDefinition } from './search/definitionHeuristics'
@@ -393,12 +393,12 @@ export function registerIpc(getWindow: WindowGetter, onRepoOpened?: () => void):
     async (_e, absPath: string): Promise<{ base64: string; mime: string } | null> => {
       if (!session || !session.baseline) return null
       const { root, baseline } = session
-      const rel = relative(root, resolve(absPath))
-      if (!rel || isAbsolute(rel) || rel.startsWith('..')) return null
+      const rel = relForBase(root, absPath)
+      if (rel === null) return null
       const mime = mimeFor(rel)
       if (!isImageMime(mime)) return null
       const base = baseline.kind === 'merge-base' ? baseline.base : baseline.kind === 'custom' ? baseline.ref : 'HEAD'
-      const buf = await readBaseBlob(root, base, rel.split('\\').join('/'))
+      const buf = await readBaseBlob(root, base, rel)
       return buf ? { base64: buf.toString('base64'), mime } : null
     }
   )

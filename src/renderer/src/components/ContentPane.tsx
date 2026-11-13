@@ -42,6 +42,7 @@ function isSvg(path: string): boolean {
 export default function ContentPane({
   file,
   refreshKey,
+  baselineKey,
   selection,
   versions,
   workspaceRoot,
@@ -55,6 +56,7 @@ export default function ContentPane({
 }: {
   file: ChangedFile | null
   refreshKey: number
+  baselineKey: string
   selection: Selection
   versions: HistoryVersion[]
   workspaceRoot: string
@@ -194,7 +196,7 @@ export default function ContentPane({
       baseline: cachedReader((p: string) => window.viewmaster.readBaseResource(p))
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [absPathKey, refreshKey]
+    [absPathKey, refreshKey, baselineKey]
   )
   // Remote cache survives an on-disk refresh of the same file (keyed on absPath only).
   const remoteReader = useMemo(

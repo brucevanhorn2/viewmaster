@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtemp, mkdir, rm, writeFile, symlink } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join, dirname } from 'path'
-import { readResource } from './resource'
+import { readResource, relForBase } from './resource'
 
 let dir: string
 
@@ -92,5 +92,26 @@ describe('readResource', () => {
     const big = Buffer.alloc(11 * 1024 * 1024, 0x61)
     const abs = await write('big.png', big)
     expect(await readResource(abs, dir)).toBeNull()
+  })
+})
+
+describe('relForBase', () => {
+  const root = process.platform === 'win32' ? 'C:\\r' : '/r'
+  const sep = process.platform === 'win32' ? '\\' : '/'
+  it('returns a forward-slash rel for a nested path', () => {
+    expect(relForBase(root, `${root}${sep}docs${sep}img${sep}a.png`)).toBe('docs/img/a.png')
+  })
+  it('returns null for the root itself', () => {
+    expect(relForBase(root, root)).toBeNull()
+  })
+  it('returns null for paths escaping the root', () => {
+    expect(relForBase(root, `${root}${sep}..${sep}x.png`)).toBeNull()
+    expect(relForBase(root, `${root}${sep}docs${sep}..${sep}..${sep}x.png`)).toBeNull()
+  })
+  it.runIf(process.platform === 'win32')('returns null for a different drive', () => {
+    expect(relForBase('C:\\r', 'D:\\x.png')).toBeNull()
+  })
+  it.runIf(process.platform === 'win32')('converts backslashes', () => {
+    expect(relForBase('C:\\r', 'C:\\r\\a\\b\\c.png')).toBe('a/b/c.png')
   })
 })

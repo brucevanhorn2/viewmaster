@@ -103,3 +103,10 @@ const IMAGE_MIMES = new Set([
 export function isImageMime(mime: string): boolean {
   return IMAGE_MIMES.has(mime)
 }
+
+/** Repo-relative, forward-slash path of absPath under root; null if it is the root or escapes it. */
+export function relForBase(root: string, absPath: string): string | null {
+  const rel = relative(root, resolve(absPath))
+  if (!rel || isAbsolute(rel) || rel.startsWith('..')) return null
+  return rel.split('\\').join('/')
+}

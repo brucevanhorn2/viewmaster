@@ -165,6 +165,15 @@ describe('resolveMarkdownImages', () => {
     expect(dom(out.html).querySelector('.md-img-missing')).not.toBeNull()
   })
 
+  it('decodes %2e%2e traversal before resolving; refused reads become placeholders', async () => {
+    const { opts, readLocal } = setup()
+    readLocal.mockResolvedValue(null)
+    const out = await resolveMarkdownImages('<img src="%2e%2e/%2e%2e/x.png">', opts)
+    expect(readLocal).toHaveBeenCalledWith('C:/x.png')
+    expect(dom(out.html).querySelector('.md-img-missing')).not.toBeNull()
+    expect(dom(out.html).querySelector('img')).toBeNull()
+  })
+
   it('placeholders when a relative path escapes the drive root', async () => {
     const { opts, readLocal } = setup({ docAbsPath: 'C:\\r\\docs\\a.md' })
     const out = await resolveMarkdownImages('<img src="../../../x.png">', opts)
