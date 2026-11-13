@@ -1,0 +1,261 @@
+// @vitest-environment jsdom
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { attachDocumentPanZoom } from './documentPanZoom'
+
+let container: HTMLElement
+
+function rect(w: number, h: number): DOMRect {
+  return { left: 0, top: 0, right: w, bottom: h, width: w, height: h, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+}
+function stubSize(el: Element, w: number, h: number): void {
+  ;(el as HTMLElement).getBoundingClientRect = () => rect(w, h)
+}
+function loaded(img: HTMLImageElement, w: number, h: number, complete = true): void {
+  Object.defineProperty(img, 'naturalWidth', { value: w, configurable: true })
+  Object.defineProperty(img, 'naturalHeight', { value: h, configurable: true })
+  Object.defineProperty(img, 'complete', { value: complete, configurable: true })
+  stubSize(img, w, h)
+}
+function mermaidNode(w = 400, h = 200): HTMLElement {
+  const pre = document.createElement('pre')
+  pre.className = 'mermaid'
+  pre.setAttribute('data-processed', 'true')
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  pre.appendChild(svg)
+  stubSize(svg, w, h)
+  return pre
+}
+
+beforeEach(() => {
+  container = document.createElement('div')
+  document.body.innerHTML = ''
+  document.body.appendChild(container)
+  // wrappers are created inside the helper; give every element a fixed layout box
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => rect(400, 300))
+})
+afterEach(() => vi.restoreAllMocks())
+
+describe('attachDocumentPanZoom', () => {
+  it('wraps a processed mermaid svg', () => {
+    container.appendChild(mermaidNode())
+    const d = attachDocumentPanZoom(container, null)
+    const w = container.querySelector('.pz-viewport.pz-doc') as HTMLElement
+    expect(w).not.toBeNull()
+    expect(w.querySelector('svg')).not.toBeNull()
+    expect(w.querySelector('.pz-controls')).not.toBeNull()
+    expect(w.style.width).toBe('400px')
+    expect(w.style.aspectRatio).toBe('400 / 200')
+    expect(w.style.height).toBe('')
+    d.destroy()
+  })
+
+  it('skips failed mermaid nodes', () => {
+    container.innerHTML = '<pre class="mermaid mermaid-error" data-processed="true">bad</pre>'
+    expect(() => attachDocumentPanZoom(container, null)).not.toThrow()
+    expect(container.querySelector('.pz-doc')).toBeNull()
+  })
+
+  it('skips tiny and unloaded images, wraps big ones', () => {
+    const tiny = document.createElement('img')
+    const unloaded = document.createElement('img')
+    const big = document.createElement('img')
+    loaded(tiny, 32, 32)
+    loaded(unloaded, 400, 300, false)
+    loaded(big, 400, 300)
+    container.append(tiny, unloaded, big)
+    attachDocumentPanZoom(container, null)
+    expect(container.querySelectorAll('.pz-doc')).toHaveLength(1)
+    expect(big.parentElement?.classList.contains('pz-doc')).toBe(true)
+    expect(tiny.parentElement).toBe(container)
+    expect(unloaded.parentElement).toBe(container)
+  })
+
+  it('skips elements measuring 0 on an axis', () => {
+    const img = document.createElement('img')
+    loaded(img, 400, 300)
+    stubSize(img, 0, 300)
+    container.appendChild(img)
+    attachDocumentPanZoom(container, null)
+    expect(container.querySelector('.pz-doc')).toBeNull()
+  })
+
+  it('restores saved states by index', () => {
+    container.append(mermaidNode(), mermaidNode())
+    const saved = [
+      { zoom: 2, x: -10, y: -10 },
+      { zoom: 3, x: -20, y: -20 }
+    ]
+    const d = attachDocumentPanZoom(container, saved)
+    const s = d.states()
+    expect(s.map((x) => x?.zoom)).toEqual([2, 3])
+    d.destroy()
+  })
+
+  it('resets all when count changes', () => {
+    container.append(mermaidNode(), mermaidNode(), mermaidNode())
+    const d = attachDocumentPanZoom(container, [
+      { zoom: 2, x: 0, y: 0 },
+      { zoom: 3, x: 0, y: 0 }
+    ])
+    const s = d.states()
+    expect(s).toHaveLength(3)
+    s.forEach((x) => expect(x?.zoom).toBe(1))
+  })
+
+  it('destroy unwraps', () => {
+    container.append(mermaidNode())
+    const img = document.createElement('img')
+    loaded(img, 400, 300)
+    img.setAttribute('src', 'a.png')
+    container.append(img)
+    const before = container.innerHTML
+    const d = attachDocumentPanZoom(container, null)
+    expect(container.innerHTML).not.toBe(before)
+    d.destroy()
+    expect(container.innerHTML).toBe(before)
+  })
+
+  it('destroy and states are safe after the container markup was replaced', () => {
+    container.append(mermaidNode())
+    const d = attachDocumentPanZoom(container, null)
+    const last = d.states()
+    container.innerHTML = '<p>new</p>'
+    expect(d.states()).toEqual(last)
+    expect(() => d.destroy()).not.toThrow()
+    expect(container.innerHTML).toBe('<p>new</p>')
+  })
+})
+
+describe('late-loading and mermaid-internal images', () => {
+  it('wraps an image once it finishes loading; count change falls back to Fit', () => {
+    const late = document.createElement('img')
+    loaded(late, 400, 300, false)
+    container.append(mermaidNode(), late)
+    const d = attachDocumentPanZoom(container, [{ zoom: 2, x: 0, y: 0 }])
+    expect(late.parentElement).toBe(container)
+    loaded(late, 400, 300, true)
+    late.dispatchEvent(new Event('load'))
+    expect(late.parentElement?.classList.contains('pz-doc')).toBe(true)
+    expect(d.states().map((s) => s?.zoom)).toEqual([1, 1])
+    d.destroy()
+    expect(late.parentElement).toBe(container)
+  })
+
+  it('destroy removes pending load listeners', () => {
+    const late = document.createElement('img')
+    loaded(late, 400, 300, false)
+    container.append(late)
+    const d = attachDocumentPanZoom(container, null)
+    d.destroy()
+    loaded(late, 400, 300, true)
+    late.dispatchEvent(new Event('load'))
+    expect(late.parentElement).toBe(container)
+  })
+
+  it('does not wrap images inside mermaid output', () => {
+    const pre = mermaidNode()
+    const img = document.createElement('img')
+    loaded(img, 400, 300)
+    pre.appendChild(img)
+    container.append(pre)
+    attachDocumentPanZoom(container, null)
+    expect(img.closest('.pz-doc')).toBeNull()
+  })
+})
+
+describe('review fixes', () => {
+  it('restores a diagram zoom on reload while an image is still loading', () => {
+    const late = document.createElement('img')
+    loaded(late, 400, 300, false)
+    container.append(mermaidNode(), late)
+    const d = attachDocumentPanZoom(container, [{ zoom: 2, x: 0, y: 0 }, null])
+    expect(d.states()[0]?.zoom).toBe(2)
+    d.destroy()
+  })
+
+  it('a late image load wraps only that image and keeps existing zoom', () => {
+    const late = document.createElement('img')
+    loaded(late, 400, 300, false)
+    container.append(mermaidNode(), late)
+    const d = attachDocumentPanZoom(container, [{ zoom: 2, x: 0, y: 0 }, { zoom: 3, x: 0, y: 0 }])
+    const diagramBox = container.querySelector('.pz-doc')
+    loaded(late, 400, 300, true)
+    late.dispatchEvent(new Event('load'))
+    expect(container.querySelector('.pz-doc')).toBe(diagramBox)
+    expect(d.states().map((s) => s?.zoom)).toEqual([2, 3])
+    d.destroy()
+  })
+
+  it('wraps images inline so side-by-side images stay side by side', () => {
+    const img = document.createElement('img')
+    loaded(img, 400, 300)
+    container.append(img, mermaidNode())
+    attachDocumentPanZoom(container, null)
+    const boxes = container.querySelectorAll('.pz-doc')
+    expect(boxes[0].classList.contains('pz-doc-inline')).toBe(true)
+    expect(boxes[1].classList.contains('pz-doc-inline')).toBe(false)
+  })
+
+  it('skips badge-shaped images (wide but short)', () => {
+    const badge = document.createElement('img')
+    loaded(badge, 100, 20)
+    container.append(badge)
+    attachDocumentPanZoom(container, null)
+    expect(container.querySelector('.pz-doc')).toBeNull()
+  })
+
+  it('wraps a loaded SVG <img> with no intrinsic size using its rendered size', () => {
+    const img = document.createElement('img')
+    loaded(img, 0, 0)
+    stubSize(img, 600, 400)
+    container.append(img)
+    attachDocumentPanZoom(container, null)
+    expect(img.parentElement?.classList.contains('pz-doc')).toBe(true)
+  })
+
+  it('zoom ceiling for a CSS-shrunk image comes from its intrinsic size', () => {
+    const img = document.createElement('img')
+    loaded(img, 6000, 4500)
+    stubSize(img, 400, 300)
+    container.append(img)
+    const d = attachDocumentPanZoom(container, [{ zoom: 20, x: 0, y: 0 }])
+    expect(d.states()[0]?.zoom).toBe(20)
+    d.destroy()
+  })
+})
+
+describe('round 3 fixes', () => {
+  it('skips boxes rendered too narrow for the controls, even for big images', () => {
+    const img = document.createElement('img')
+    loaded(img, 2000, 2000)
+    stubSize(img, 80, 80)
+    container.append(img)
+    attachDocumentPanZoom(container, null)
+    expect(container.querySelector('.pz-doc')).toBeNull()
+  })
+
+  it('keeps the rendered aspect of an image stretched by width/height attributes', () => {
+    const img = document.createElement('img')
+    loaded(img, 800, 800)
+    img.setAttribute('width', '400')
+    img.setAttribute('height', '100')
+    stubSize(img, 400, 100)
+    container.append(img)
+    attachDocumentPanZoom(container, null)
+    const w = img.parentElement as HTMLElement
+    expect(w.style.width).toBe('400px')
+    expect(w.style.aspectRatio).toBe('400 / 100')
+    expect(img.style.width).toBe('400px')
+    expect(img.style.height).toBe('100px')
+  })
+
+  it("a squeezed diagram's box prefers mermaid's max-width so it can grow back", () => {
+    const pre = mermaidNode(400, 200)
+    ;(pre.firstChild as SVGElement).style.maxWidth = '900px'
+    container.append(pre)
+    attachDocumentPanZoom(container, null)
+    const w = container.querySelector('.pz-doc') as HTMLElement
+    expect(w.style.width).toBe('900px')
+    expect(w.style.aspectRatio).toBe('400 / 200')
+  })
+})
