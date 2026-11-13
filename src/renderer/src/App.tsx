@@ -62,6 +62,8 @@ function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Elem
   )
 }
 
+const SIDEBAR_SHORTCUT = navigator.userAgent.includes('Mac') ? '⌘B' : 'Ctrl+B'
+
 export default function App(): React.JSX.Element {
   const [repo, setRepo] = useState<RepoState | null>(null)
   const [navState, setNavState] = useState(initialNavigationState())
@@ -82,6 +84,11 @@ export default function App(): React.JSX.Element {
   // deterministic regardless of which call's IPC round-trip finishes first.
   const openRequestId = useRef(0)
 
+  const [sidebarVisible, setSidebarVisible] = useState(true)
+  // Bumped on every Find in Files request so SearchPane refocuses its input even when
+  // it was already open (e.g. open, hide the sidebar, Find in Files again).
+  const [searchFocusRequest, setSearchFocusRequest] = useState(0)
+
   const openFolder = useCallback((root: string): void => {
     // Nothing from the previous folder is relevant to the new one -- a
     // complete reset (even when reopening the same folder from Recents) is
@@ -100,6 +107,7 @@ export default function App(): React.JSX.Element {
     void window.viewmaster.openRepo(root).then((state) => {
       if (isStaleRequest(myRequestId, openRequestId.current)) return
       setRepo(state)
+      setSidebarVisible(true)
       setNavState(initialNavigationState())
     })
   }, [])
@@ -288,14 +296,13 @@ export default function App(): React.JSX.Element {
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [relatedFilesOpen, setRelatedFilesOpen] = useState(false)
-  const [sidebarVisible, setSidebarVisible] = useState(true)
-
   // Search and Related Files live inside the sidebar pane, so opening them must show it.
   useEffect(
     () =>
       window.viewmaster.onMenuFindInFiles(() => {
         setSidebarVisible(true)
         setSearchOpen(true)
+        setSearchFocusRequest((n) => n + 1)
       }),
     []
   )
@@ -308,8 +315,6 @@ export default function App(): React.JSX.Element {
     []
   )
   useEffect(() => window.viewmaster.onMenuToggleSidebar(() => setSidebarVisible((v) => !v)), [])
-  // A newly opened folder always starts with its file tree showing.
-  useEffect(() => setSidebarVisible(true), [repo?.root])
   useEffect(() => window.viewmaster.onMenuGoBack(onGoBack), [onGoBack])
   useEffect(() => window.viewmaster.onMenuGoForward(onGoForward), [onGoForward])
 
@@ -353,77 +358,82 @@ export default function App(): React.JSX.Element {
   return (
     <div className="app">
       <div className="app-body">
-      {!sidebarVisible && (
-        // A thin rail beside the content (not an overlay), so it never covers the toolbar.
-        <button
-          className="sidebar-rail"
-          onClick={onShowSidebar}
-          title="Show sidebar (Ctrl+B)"
-          aria-label="Show sidebar"
-        >
-          ›
-        </button>
-      )}
-      <div className="app-split">
-      <Allotment defaultSizes={[280, 920]}>
-        <Allotment.Pane visible={sidebarVisible} minSize={180} preferredSize={280}>
-          <Allotment vertical>
+        {!sidebarVisible && (
+          // A thin rail beside the content (not an overlay), so it never covers the toolbar.
+          <button
+            className="sidebar-rail"
+            onClick={onShowSidebar}
+            title={`Show sidebar (${SIDEBAR_SHORTCUT})`}
+            aria-label="Show sidebar"
+          >
+            ›
+          </button>
+        )}
+        <div className="app-split">
+          <Allotment defaultSizes={[280, 920]}>
+            <Allotment.Pane visible={sidebarVisible} minSize={180} preferredSize={280}>
+              {/* Allotment only shrinks a hidden pane to 0px; inert keeps its inputs from
+                  holding focus or being reached with Tab while it's hidden. */}
+              <div className="sidebar-pane" inert={!sidebarVisible}>
+                <Allotment vertical>
+                  <Allotment.Pane>
+                    <Sidebar
+                      state={repo}
+                      selected={selected?.path ?? null}
+                      onSelect={onSidebarSelect}
+                      onSetMode={setMode}
+                      onSetCustomBaseline={setCustomBaseline}
+                      onClose={onCloseSidebar}
+                    />
+                  </Allotment.Pane>
+                  <Allotment.Pane preferredSize={220} minSize={80}>
+                    <HistoryPane
+                      versions={versions}
+                      selection={selection}
+                      isGitRepo={repo?.kind === 'repo'}
+                      onSelect={onSelectRevision}
+                    />
+                  </Allotment.Pane>
+                  <Allotment.Pane visible={searchOpen} preferredSize={240} minSize={120}>
+                    <SearchPane
+                      key={repo?.root ?? 'none'}
+                      open={searchOpen}
+                      focusRequest={searchFocusRequest}
+                      onSelectMatch={onSelectMatch}
+                      onClose={onCloseSearch}
+                    />
+                  </Allotment.Pane>
+                  <Allotment.Pane visible={relatedFilesOpen} preferredSize={240} minSize={120}>
+                    <RelatedFilesPane
+                      key={repo?.root ?? 'none'}
+                      file={selected}
+                      workspaceRoot={repo?.root ?? ''}
+                      open={relatedFilesOpen}
+                      onNavigate={navigateTo}
+                      onClose={onCloseRelatedFiles}
+                    />
+                  </Allotment.Pane>
+                </Allotment>
+              </div>
+            </Allotment.Pane>
             <Allotment.Pane>
-              <Sidebar
-                state={repo}
-                selected={selected?.path ?? null}
-                onSelect={onSidebarSelect}
-                onSetMode={setMode}
-                onSetCustomBaseline={setCustomBaseline}
-                onClose={onCloseSidebar}
-              />
-            </Allotment.Pane>
-            <Allotment.Pane preferredSize={220} minSize={80}>
-              <HistoryPane
-                versions={versions}
-                selection={selection}
-                isGitRepo={repo?.kind === 'repo'}
-                onSelect={onSelectRevision}
-              />
-            </Allotment.Pane>
-            <Allotment.Pane visible={searchOpen} preferredSize={240} minSize={120}>
-              <SearchPane
-                key={repo?.root ?? 'none'}
-                open={searchOpen}
-                onSelectMatch={onSelectMatch}
-                onClose={onCloseSearch}
-              />
-            </Allotment.Pane>
-            <Allotment.Pane visible={relatedFilesOpen} preferredSize={240} minSize={120}>
-              <RelatedFilesPane
-                key={repo?.root ?? 'none'}
+              <ContentPane
                 file={selected}
+                refreshKey={refreshKey}
+                selection={selection}
+                versions={versions}
                 workspaceRoot={repo?.root ?? ''}
-                open={relatedFilesOpen}
                 onNavigate={navigateTo}
-                onClose={onCloseRelatedFiles}
+                navigationTarget={navigationTarget}
+                onTargetConsumed={onTargetConsumed}
+                canGoBack={canGoBack(navState)}
+                canGoForward={canGoForward(navState)}
+                onGoBack={onGoBack}
+                onGoForward={onGoForward}
               />
             </Allotment.Pane>
           </Allotment>
-        </Allotment.Pane>
-        <Allotment.Pane>
-          <ContentPane
-            file={selected}
-            refreshKey={refreshKey}
-            selection={selection}
-            versions={versions}
-            workspaceRoot={repo?.root ?? ''}
-            onNavigate={navigateTo}
-            navigationTarget={navigationTarget}
-            onTargetConsumed={onTargetConsumed}
-            canGoBack={canGoBack(navState)}
-            canGoForward={canGoForward(navState)}
-            onGoBack={onGoBack}
-            onGoForward={onGoForward}
-          />
-        </Allotment.Pane>
-      </Allotment>
-      </div>
+        </div>
       </div>
       <StatusNotice />
     </div>

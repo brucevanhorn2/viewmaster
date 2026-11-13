@@ -311,7 +311,7 @@ export default function Sidebar({
         )}
         <button
           className="sidebar-close"
-          title="Hide sidebar (Ctrl+B)"
+          title={`Hide sidebar (${navigator.userAgent.includes('Mac') ? '⌘B' : 'Ctrl+B'})`}
           aria-label="Hide sidebar"
           onClick={onClose}
         >

@@ -42,7 +42,6 @@ body {
   height: 100%;
   display: flex;
   flex-direction: column;
-  position: relative;
 }
 
 .welcome {
@@ -154,12 +153,16 @@ body {
 }
 
 .sidebar-header .toolbar-segment {
+  margin-left: auto;
   flex-shrink: 0;
   text-transform: none;
   letter-spacing: normal;
 }
 
 .sidebar-close {
+  /* Pushed to the far right (beside the Changed/Browse toggle when there is one), so the
+     header's space-between doesn't leave the toggle floating in the middle. */
+  margin-left: auto;
   background: transparent;
   border: none;
   color: var(--fg-dim);
@@ -170,6 +173,10 @@ body {
   flex-shrink: 0;
 }
 
+.sidebar-header .toolbar-segment + .sidebar-close {
+  margin-left: 0;
+}
+
 .sidebar-close:hover {
   color: var(--fg);
 }
@@ -178,6 +185,10 @@ body {
   flex: 1;
   min-height: 0;
   display: flex;
+}
+
+.sidebar-pane {
+  height: 100%;
 }
 
 .app-split {
