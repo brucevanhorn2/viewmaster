@@ -5,10 +5,12 @@ const DEBOUNCE_MS = 250
 
 export default function SearchPane({
   open,
+  focusRequest = 0,
   onSelectMatch,
   onClose
 }: {
   open: boolean
+  focusRequest?: number
   onSelectMatch: (match: SearchMatch) => void
   onClose: () => void
 }): React.JSX.Element {
@@ -22,7 +24,7 @@ export default function SearchPane({
 
   useEffect(() => {
     if (open) inputRef.current?.focus()
-  }, [open])
+  }, [open, focusRequest])
 
   useEffect(() => {
     if (query.trim() === '') {
