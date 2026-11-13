@@ -174,23 +174,37 @@ body {
   color: var(--fg);
 }
 
-.sidebar-show-button {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 10;
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.app-split {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+/* Shown in place of the hidden sidebar: a narrow full-height strip left of the content. */
+.sidebar-rail {
+  flex-shrink: 0;
+  width: 16px;
+  padding: 8px 0 0;
   background: var(--bg-sidebar);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 4px 8px;
+  color: var(--fg-dim);
+  border: none;
+  border-right: 1px solid var(--border);
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
+  display: flex;
+  justify-content: center;
 }
 
-.sidebar-show-button:hover {
+.sidebar-rail:hover {
   background: var(--bg-hover);
+  color: var(--fg);
 }
 
 .sidebar-header-label-clickable {

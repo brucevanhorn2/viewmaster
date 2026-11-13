@@ -309,8 +309,13 @@ export default function Sidebar({
             ))}
           </span>
         )}
-        <button className="sidebar-close" title="Close sidebar" onClick={onClose}>
-          ×
+        <button
+          className="sidebar-close"
+          title="Hide sidebar (Ctrl+B)"
+          aria-label="Hide sidebar"
+          onClick={onClose}
+        >
+          ‹
         </button>
       </div>
       <div className="sidebar-tree">

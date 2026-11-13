@@ -290,8 +290,26 @@ export default function App(): React.JSX.Element {
   const [relatedFilesOpen, setRelatedFilesOpen] = useState(false)
   const [sidebarVisible, setSidebarVisible] = useState(true)
 
-  useEffect(() => window.viewmaster.onMenuFindInFiles(() => setSearchOpen(true)), [])
-  useEffect(() => window.viewmaster.onMenuRelatedFiles(() => setRelatedFilesOpen(true)), [])
+  // Search and Related Files live inside the sidebar pane, so opening them must show it.
+  useEffect(
+    () =>
+      window.viewmaster.onMenuFindInFiles(() => {
+        setSidebarVisible(true)
+        setSearchOpen(true)
+      }),
+    []
+  )
+  useEffect(
+    () =>
+      window.viewmaster.onMenuRelatedFiles(() => {
+        setSidebarVisible(true)
+        setRelatedFilesOpen(true)
+      }),
+    []
+  )
+  useEffect(() => window.viewmaster.onMenuToggleSidebar(() => setSidebarVisible((v) => !v)), [])
+  // A newly opened folder always starts with its file tree showing.
+  useEffect(() => setSidebarVisible(true), [repo?.root])
   useEffect(() => window.viewmaster.onMenuGoBack(onGoBack), [onGoBack])
   useEffect(() => window.viewmaster.onMenuGoForward(onGoForward), [onGoForward])
 
@@ -334,6 +352,19 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="app">
+      <div className="app-body">
+      {!sidebarVisible && (
+        // A thin rail beside the content (not an overlay), so it never covers the toolbar.
+        <button
+          className="sidebar-rail"
+          onClick={onShowSidebar}
+          title="Show sidebar (Ctrl+B)"
+          aria-label="Show sidebar"
+        >
+          ›
+        </button>
+      )}
+      <div className="app-split">
       <Allotment defaultSizes={[280, 920]}>
         <Allotment.Pane visible={sidebarVisible} minSize={180} preferredSize={280}>
           <Allotment vertical>
@@ -392,12 +423,9 @@ export default function App(): React.JSX.Element {
           />
         </Allotment.Pane>
       </Allotment>
+      </div>
+      </div>
       <StatusNotice />
-      {!sidebarVisible && (
-        <button className="sidebar-show-button" onClick={onShowSidebar} title="Show sidebar">
-          ›
-        </button>
-      )}
     </div>
   )
 }
