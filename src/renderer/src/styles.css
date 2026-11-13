@@ -152,10 +152,71 @@ body {
   letter-spacing: normal;
 }
 
+/* Changed/Browse toggle and the hide button, kept together at the right edge. */
+.sidebar-header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .sidebar-header .toolbar-segment {
   flex-shrink: 0;
   text-transform: none;
   letter-spacing: normal;
+}
+
+.sidebar-close {
+  background: transparent;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.sidebar-close:hover {
+  color: var(--fg);
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.sidebar-pane {
+  height: 100%;
+}
+
+.app-split {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+/* Shown in place of the hidden sidebar: a narrow full-height strip left of the content. */
+.sidebar-rail {
+  flex-shrink: 0;
+  width: 16px;
+  padding: 8px 0 0;
+  background: var(--bg-sidebar);
+  color: var(--fg-dim);
+  border: none;
+  border-right: 1px solid var(--border);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+}
+
+.sidebar-rail:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
 }
 
 .sidebar-header-label-clickable {

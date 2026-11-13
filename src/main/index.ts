@@ -32,6 +32,10 @@ function sendRelatedFiles(): void {
   getMainWindow()?.webContents.send('menu:relatedFiles')
 }
 
+function sendToggleSidebar(): void {
+  getMainWindow()?.webContents.send('menu:toggleSidebar')
+}
+
 function sendGoBack(): void {
   getMainWindow()?.webContents.send('menu:goBack')
 }
@@ -135,18 +139,40 @@ function buildMenu(): void {
         ...editExtras,
         { type: 'separator' },
         {
+          id: 'menu-find-in-files',
           label: 'Find in Files…',
           accelerator: 'CmdOrCtrl+Shift+F',
           click: () => sendFindInFiles()
         },
         {
+          id: 'menu-related-files',
           label: 'Related Files…',
           accelerator: 'CmdOrCtrl+Alt+R',
           click: () => sendRelatedFiles()
         }
       ]
     },
-    { role: 'viewMenu' },
+    // Spelled out (instead of role: 'viewMenu') so Toggle Sidebar can sit in it.
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Toggle Sidebar',
+          accelerator: 'CmdOrCtrl+B',
+          click: () => sendToggleSidebar()
+        },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
     {
       label: 'Navigate',
       submenu: [

@@ -53,6 +53,7 @@ const api = {
     subscribe('menu:openFile', cb),
   onMenuFindInFiles: (cb: () => void): (() => void) => subscribe<void>('menu:findInFiles', () => cb()),
   onMenuRelatedFiles: (cb: () => void): (() => void) => subscribe<void>('menu:relatedFiles', () => cb()),
+  onMenuToggleSidebar: (cb: () => void): (() => void) => subscribe<void>('menu:toggleSidebar', () => cb()),
   onMenuGoBack: (cb: () => void): (() => void) => subscribe<void>('menu:goBack', () => cb()),
   onMenuGoForward: (cb: () => void): (() => void) => subscribe<void>('menu:goForward', () => cb()),
   onHistoryChanged: (cb: (relPath: string) => void): (() => void) =>
