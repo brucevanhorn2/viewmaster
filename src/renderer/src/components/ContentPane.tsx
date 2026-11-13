@@ -188,15 +188,21 @@ export default function ContentPane({
 
   // Readers are cached per file + refresh so repeated/concurrent image reads share one IPC call.
   const absPathKey = file?.absPath ?? null
-  const readers = useMemo(
+  const localReaders = useMemo(
     () => ({
       disk: cachedReader((p: string) => window.viewmaster.readResource(p)),
-      baseline: cachedReader((p: string) => window.viewmaster.readBaseResource(p)),
-      remote: cachedReader((u: string) => window.viewmaster.fetchRemoteImage(u))
+      baseline: cachedReader((p: string) => window.viewmaster.readBaseResource(p))
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [absPathKey, refreshKey]
   )
+  // Remote cache survives an on-disk refresh of the same file (keyed on absPath only).
+  const remoteReader = useMemo(
+    () => cachedReader((u: string) => window.viewmaster.fetchRemoteImage(u)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [absPathKey]
+  )
+  const readers = { ...localReaders, remote: remoteReader }
   const [allowRemote, allowRemoteNow] = useRemoteAllowance(absPathKey)
   const imagesFor = (read: typeof readers.disk): MarkdownImages => ({
     readLocal: read,

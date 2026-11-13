@@ -86,5 +86,6 @@ describe('MarkdownView images', () => {
     expect(readRemote).toHaveBeenCalledWith('https://t/b.png')
     expect(host.querySelector('.md-img-remote')).toBeNull()
     expect(host.querySelectorAll('img').length).toBe(2)
+    expect(host.querySelector('.remote-images-bar')).toBeNull()
   })
 })

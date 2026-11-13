@@ -56,5 +56,22 @@ describe('MarkdownSideBySideView images', () => {
     expect(panes[1].querySelector('img')!.getAttribute('src')).toContain('NEWNEW')
     expect(host.querySelectorAll('.remote-images-bar').length).toBe(1)
     expect(host.querySelector('.remote-images-bar')!.textContent).toContain('2 remote images')
+    const allowed = (m: ReturnType<typeof mkImages>) => ({ ...m, allowRemote: true })
+    await act(async () =>
+      root!.render(
+        createElement(MarkdownSideBySideView, {
+          baseContent: 'x',
+          content: 'y',
+          absPath: '/d/a.md',
+          workspaceRoot: '/d',
+          onNavigate: () => {},
+          scrollToAnchor: null,
+          onAnchorConsumed: () => {},
+          oldImages: allowed(mkImages('OLDOLD')),
+          newImages: allowed(mkImages('NEWNEW'))
+        })
+      )
+    )
+    expect(host.querySelector('.remote-images-bar')).toBeNull()
   })
 })

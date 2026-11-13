@@ -42,7 +42,10 @@ export default function MarkdownView({
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [html, setHtml] = useState('')
-  const [remoteCount, setRemoteCount] = useState(0)
+  // Remote-image count is tagged with the path it was computed for, so a just-switched
+  // file never shows the previous file's bar.
+  const [remoteInfo, setRemoteInfo] = useState<{ path: string; count: number } | null>(null)
+  const remoteCount = remoteInfo?.path === absPath ? remoteInfo.count : 0
   const { readLocal, readRemote, allowRemote, onAllowRemote } = images
   // Tracks which absPath the currently-rendered `html` state actually
   // belongs to. Since rendering is async, `html` can briefly still hold the
@@ -84,7 +87,7 @@ export default function MarkdownView({
       .then((r) => {
         if (!stale) {
           htmlForPath.current = absPath
-          setRemoteCount(r.remoteCount)
+          setRemoteInfo({ path: absPath, count: r.remoteCount })
           setHtml(r.html)
         }
       })
@@ -94,10 +97,11 @@ export default function MarkdownView({
         if (baseContent !== null) {
           // Marks composition failed — fall back to the plain rendered view.
           try {
-            const plain = await renderMarkdown(content)
+            const plain = await withImages(await renderMarkdown(content))
             if (!stale) {
               htmlForPath.current = absPath
-              setHtml(`<p><em>Marks unavailable: ${escapeHtml(message)}</em></p>${plain}`)
+              setRemoteInfo({ path: absPath, count: plain.remoteCount })
+              setHtml(`<p><em>Marks unavailable: ${escapeHtml(message)}</em></p>${plain.html}`)
             }
             return
           } catch {
@@ -106,6 +110,7 @@ export default function MarkdownView({
         }
         if (!stale) {
           htmlForPath.current = absPath
+          setRemoteInfo({ path: absPath, count: 0 })
           setHtml(
             `<p><em>Markdown rendering failed: ${escapeHtml(message)}</em></p><pre><code>${escapeHtml(content)}</code></pre>`
           )
@@ -151,7 +156,7 @@ export default function MarkdownView({
 
   return (
     <div className="markdown-scroll">
-      <RemoteImagesBar count={remoteCount} onLoad={onAllowRemote} />
+      <RemoteImagesBar count={allowRemote ? 0 : remoteCount} onLoad={onAllowRemote} />
       <div
         ref={ref}
         className="markdown-body"
