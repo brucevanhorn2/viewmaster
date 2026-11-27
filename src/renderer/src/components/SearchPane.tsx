@@ -38,7 +38,7 @@ export default function SearchPane({
     setSearching(true)
     const timer = setTimeout(() => {
       const requestId = ++requestIdRef.current
-      void window.viewmaster.search(query)
+      void window.secondLook.search(query)
         .then((result) => {
           if (requestIdRef.current !== requestId) return
           setMatches(result.matches)

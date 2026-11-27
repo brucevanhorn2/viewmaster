@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="img/viewmaster.png" alt="View Master" width="320">
+  <img src="img/second-look.png" alt="Second Look" width="320">
 </p>
 
 A read-only desktop viewer for **markdown documents**, **images and PDFs**, and
 **branch diffs**.
 
 Built to replace reaching for a full IDE just to read a rendered markdown file,
-preview an image or PDF, or eyeball what changed on a branch. View Master only
+preview an image or PDF, or eyeball what changed on a branch. Second Look only
 ever *views* — it never edits your files.
 
 ## Features
@@ -74,6 +74,10 @@ introduced — not just what happens to differ from the tip of `main`.
   imports, what imports it, and what references its declared symbols —
   even files untouched by the current branch.
 
+### Upgrading from View Master
+On first launch, Second Look copies your recent folders and local history from
+View Master, its previous name. The old folder is left in place.
+
 ## Tech stack
 
 Electron + TypeScript + React, with Monaco (code + diffs), markdown-it + mermaid +
@@ -99,20 +103,47 @@ npm run dist:linux     # build a Linux AppImage
 npm run dist:win       # build a Windows .exe
 ```
 
-### Running an unsigned macOS build
+### Releasing (macOS)
 
-The DMG is currently **unsigned** (no signing keys yet), so macOS Gatekeeper will
-refuse to open it on first launch. To run it:
+Release DMGs are universal (Intel + Apple Silicon), signed with a Developer ID
+Application certificate, and notarized by Apple so Gatekeeper opens them without
+any right-click workaround.
 
-1. Move `View Master.app` to `/Applications` (optional).
-2. **Right-click the app → Open**, then confirm in the dialog.
+One-time setup:
 
-This is a one-time step per machine. Signing and notarization are on the roadmap.
+1. Install a **Developer ID Application** certificate in your login keychain.
+   electron-builder discovers the signing identity automatically.
+2. Create an app-specific password at [appleid.apple.com](https://appleid.apple.com).
+3. Export the notarization credentials in your shell:
+
+   ```bash
+   export APPLE_ID="you@example.com"
+   export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+   export APPLE_TEAM_ID="ABCDE12345"
+   ```
+
+Then build with `npm run dist:mac`. The signed, notarized DMG lands in `release/`.
+
+In CI, supply the certificate with `CSC_LINK` (base64-encoded `.p12`) and
+`CSC_KEY_PASSWORD` instead of a keychain, along with the three `APPLE_*`
+variables above.
+
+For a local build without signing or notarization (electron-builder packages
+`out/` and does not compile, so build first):
+
+```bash
+npm run build
+npx electron-builder --mac -c.mac.identity=null -c.mac.notarize=false
+```
+
+An unsigned build is blocked by Gatekeeper on first launch; right-click the app
+and choose **Open** to run it.
+
+Second Look shells out to the system `git`, so Git or the Xcode Command Line
+Tools must be installed.
 
 ## Roadmap
 
-- Code signing + notarization for Gatekeeper-clean, distributable DMGs
-  ([#12](https://github.com/brucevanhorn2/viewmaster/issues/12)).
 - Configurable baseline (compare against an arbitrary branch or ref)
   ([#13](https://github.com/brucevanhorn2/viewmaster/issues/13)).
 

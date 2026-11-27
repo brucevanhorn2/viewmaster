@@ -11,7 +11,7 @@ describe('runGit', () => {
 
   beforeAll(async () => {
     repo = await makeRepo()
-    notARepo = await mkdtemp(join(tmpdir(), 'viewmaster-notgit-'))
+    notARepo = await mkdtemp(join(tmpdir(), 'secondlook-notgit-'))
   })
 
   afterAll(async () => {
@@ -44,7 +44,7 @@ describe('runGit', () => {
     // deleted, renamed, or unmounted). Node's execFile would report this as
     // the exact same ENOENT as a missing `git` binary, so runGit must check
     // for it up front and reject with a distinguishable error.
-    const missingCwd = join(tmpdir(), `viewmaster-missing-cwd-${Date.now()}`)
+    const missingCwd = join(tmpdir(), `secondlook-missing-cwd-${Date.now()}`)
 
     let caught: unknown
     try {
@@ -72,7 +72,7 @@ describe('runGit', () => {
       // containers), so skip rather than assert a false negative.
       return
     }
-    const lockedParent = await mkdtemp(join(tmpdir(), 'viewmaster-locked-parent-'))
+    const lockedParent = await mkdtemp(join(tmpdir(), 'secondlook-locked-parent-'))
     const child = join(lockedParent, 'child')
     await mkdir(child)
     await chmod(lockedParent, 0o000)

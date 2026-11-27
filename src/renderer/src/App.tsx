@@ -34,17 +34,17 @@ function Welcome({ onOpen }: { onOpen: (root: string) => void }): React.JSX.Elem
   const [recents, setRecents] = useState<string[]>([])
 
   useEffect(() => {
-    void window.viewmaster.recentFolders().then(setRecents)
+    void window.secondLook.recentFolders().then(setRecents)
   }, [])
 
   const pick = async (): Promise<void> => {
-    const root = await window.viewmaster.openFolderDialog()
+    const root = await window.secondLook.openFolderDialog()
     if (root) onOpen(root)
   }
 
   return (
     <div className="welcome">
-      <h1>View Master</h1>
+      <h1>Second Look</h1>
       <p>Read-only viewer for markdown documents and branch diffs.</p>
       <div className="welcome-mark" aria-hidden="true" />
       <button className="open-button" onClick={() => void pick()}>
@@ -73,7 +73,7 @@ export default function App(): React.JSX.Element {
   const [historyTick, setHistoryTick] = useState(0)
 
   // Guards openFolder/openFile against resolving out of order: two
-  // window.viewmaster.openRepo() calls racing (e.g. two Recent Folder
+  // window.secondLook.openRepo() calls racing (e.g. two Recent Folder
   // clicks, or a menu:openFile racing a folder open) can resolve in either
   // order regardless of which one actually became the live main-process
   // session (see isStaleGeneration in src/main/ipc.ts for that separate,
@@ -116,7 +116,7 @@ export default function App(): React.JSX.Element {
       .filter((model) => !model.isAttachedToEditor())
       .forEach((model) => model.dispose())
     const myRequestId = ++openRequestId.current
-    void window.viewmaster.openRepo(root).then((state) => {
+    void window.secondLook.openRepo(root).then((state) => {
       if (isStaleRequest(myRequestId, openRequestId.current)) return
       setRepo(state)
       setSidebarVisible(true)
@@ -131,7 +131,7 @@ export default function App(): React.JSX.Element {
     // would otherwise be an uncaught TypeError into a silent no-op.
     if (!payload?.root || !payload.absPath) return
     const myRequestId = ++openRequestId.current
-    void window.viewmaster.openRepo(payload.root).then((state) => {
+    void window.secondLook.openRepo(payload.root).then((state) => {
       if (isStaleRequest(myRequestId, openRequestId.current)) return
       setRepo(state)
       setSidebarVisible(true)
@@ -140,28 +140,28 @@ export default function App(): React.JSX.Element {
   }, [])
 
   const setMode = useCallback((mode: SidebarMode): void => {
-    void window.viewmaster.setMode(mode).then((state) => {
+    void window.secondLook.setMode(mode).then((state) => {
       if (!state) return
       setRepo(state)
     })
   }, [])
 
   const setCustomBaseline = useCallback((ref: string | null): void => {
-    void window.viewmaster.setCustomBaseline(ref).then((state) => {
+    void window.secondLook.setCustomBaseline(ref).then((state) => {
       if (!state) return
       setRepo(state)
     })
   }, [])
 
-  useEffect(() => window.viewmaster.onMenuOpenFolder(openFolder), [openFolder])
-  useEffect(() => window.viewmaster.onMenuOpenFile(openFile), [openFile])
+  useEffect(() => window.secondLook.onMenuOpenFolder(openFolder), [openFolder])
+  useEffect(() => window.secondLook.onMenuOpenFile(openFile), [openFile])
 
   // Watcher-driven auto-refresh: update the change list in place. `selected`
   // is re-derived below from the nav stack + fresh `repo`, so no separate
   // reconciliation is needed here.
   useEffect(
     () =>
-      window.viewmaster.onRepoChanged((state) => {
+      window.secondLook.onRepoChanged((state) => {
         setRepo(state)
         setRefreshKey((k) => k + 1)
       }),
@@ -172,7 +172,7 @@ export default function App(): React.JSX.Element {
   // currently-selected file so the pane updates without waiting for the next
   // repo change or file switch. (Captures write outside the watched repo, so
   // they don't otherwise trigger a refresh.)
-  useEffect(() => window.viewmaster.onHistoryChanged(() => setHistoryTick((t) => t + 1)), [])
+  useEffect(() => window.secondLook.onHistoryChanged(() => setHistoryTick((t) => t + 1)), [])
 
   /**
    * Resolves an absPath against the current repo listing, synthesizing an
@@ -228,7 +228,7 @@ export default function App(): React.JSX.Element {
       return
     }
     let stale = false
-    void window.viewmaster.historyList(selected.path).then((v) => {
+    void window.secondLook.historyList(selected.path).then((v) => {
       if (!stale) setVersions(v)
     })
     return () => {
@@ -312,7 +312,7 @@ export default function App(): React.JSX.Element {
   // Search and Related Files live inside the sidebar pane, so opening them must show it.
   useEffect(
     () =>
-      window.viewmaster.onMenuFindInFiles(() => {
+      window.secondLook.onMenuFindInFiles(() => {
         setSidebarVisible(true)
         setSearchOpen(true)
         setSearchFocusRequest((n) => n + 1)
@@ -321,14 +321,14 @@ export default function App(): React.JSX.Element {
   )
   useEffect(
     () =>
-      window.viewmaster.onMenuRelatedFiles(() => {
+      window.secondLook.onMenuRelatedFiles(() => {
         setSidebarVisible(true)
         setRelatedFilesOpen(true)
       }),
     []
   )
   useEffect(
-    () => window.viewmaster.onMenuToggleSidebar(() => setSidebarVisible(!sidebarVisibleRef.current)),
+    () => window.secondLook.onMenuToggleSidebar(() => setSidebarVisible(!sidebarVisibleRef.current)),
     [setSidebarVisible]
   )
   useEffect(() => {
@@ -337,8 +337,8 @@ export default function App(): React.JSX.Element {
     sidebarFocus.current = null
     if (el?.isConnected && document.activeElement === document.body) el.focus()
   }, [sidebarVisible])
-  useEffect(() => window.viewmaster.onMenuGoBack(onGoBack), [onGoBack])
-  useEffect(() => window.viewmaster.onMenuGoForward(onGoForward), [onGoForward])
+  useEffect(() => window.secondLook.onMenuGoBack(onGoBack), [onGoBack])
+  useEffect(() => window.secondLook.onMenuGoForward(onGoForward), [onGoForward])
 
   const onSelectMatch = useCallback(
     (match: SearchMatch): void => {

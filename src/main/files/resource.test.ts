@@ -7,7 +7,7 @@ import { readResource, relForBase } from './resource'
 let dir: string
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'viewmaster-resource-'))
+  dir = await mkdtemp(join(tmpdir(), 'secondlook-resource-'))
 })
 
 afterEach(async () => {
@@ -45,7 +45,7 @@ describe('readResource', () => {
   })
 
   it('rejects a path outside the workspace root', async () => {
-    const outsideDir = await mkdtemp(join(tmpdir(), 'viewmaster-outside-'))
+    const outsideDir = await mkdtemp(join(tmpdir(), 'secondlook-outside-'))
     const outsideFile = join(outsideDir, 'secret.png')
     await writeFile(outsideFile, 'x')
     expect(await readResource(outsideFile, dir)).toBeNull()
@@ -69,7 +69,7 @@ describe('readResource', () => {
 
   it('rejects a symlink pointing outside the workspace root', async () => {
     // Create a file outside the workspace
-    const outsideDir = await mkdtemp(join(tmpdir(), 'viewmaster-symlink-target-'))
+    const outsideDir = await mkdtemp(join(tmpdir(), 'secondlook-symlink-target-'))
     const outsideFile = join(outsideDir, 'secret.png')
     await writeFile(outsideFile, 'x')
 

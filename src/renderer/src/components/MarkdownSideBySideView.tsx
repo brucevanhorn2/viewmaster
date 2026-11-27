@@ -190,7 +190,7 @@ export default function MarkdownSideBySideView({
     const href = anchor.getAttribute('href') ?? ''
     const classification = classifyLinkHref(href, absPath, workspaceRoot)
     if (classification.kind === 'external') {
-      window.viewmaster.openExternal(classification.url)
+      window.secondLook.openExternal(classification.url)
     } else if (classification.kind === 'anchor') {
       scrollToId(newRef.current, classification.id)
     } else if (classification.kind === 'navigate') {

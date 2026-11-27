@@ -24,7 +24,7 @@ function tryDecode(component: string): string | null {
  * Classifies a clicked markdown link's href for MarkdownView's click
  * handler: http(s) links open externally; a bare "#id" scrolls to that
  * heading in the current document; an in-workspace relative link
- * navigates View Master to that file (optionally also scrolling to a
+ * navigates Second Look to that file (optionally also scrolling to a
  * "#id" suffix once it renders); everything else (mailto:, links that
  * escape the workspace root, empty hrefs) is inert.
  *
